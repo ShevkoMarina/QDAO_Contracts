@@ -11,7 +11,6 @@ describe("Governor", function () {
         const token = await QDAOToken.deploy();
         console.log("QDAOToken deployed to address:", token.address);
 
-        //QDAOTimelock
         const QDAOTimelock = await ethers.getContractFactory("QDAOTimelock");
         const timelock = await QDAOTimelock.deploy(0, [owner.address], [owner.address], owner.address);
         console.log("QDAOTimelock deployed to address:", timelock.address);
