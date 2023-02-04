@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.9;
+pragma solidity ^0.8.10;
+pragma experimental ABIEncoderV2;
 
 import "./QDAOGovernorInterfaces.sol";
 import "./SafeMath.sol";
+
 
 contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
 
@@ -15,7 +17,7 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         public {
 
         timelock = QDAOTimelockInterface(_timelock);
-        token = QDAOTimelockInterface(_token);
+        token = QDAOTokenInterface(_token);
         votingPeriod = _votingPeriod;
     }
 
@@ -27,58 +29,82 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         string memory description) 
         public returns (uint) {
 
-        // Reject proposals before initiating as Governor
-        // require(initialProposalId != 0, "GovernorBravo::propose: Governor Bravo not active");
-        // Allow addresses above proposal threshold and whitelisted addresses to propose
-      //  require(token.getPriorVotes(msg.sender, sub256(block.number, 1)) > proposalThreshold || isWhitelisted(msg.sender), "GovernorBravo::propose: proposer votes below proposal threshold");
-      //  require(targets.length == values.length && targets.length == signatures.length && targets.length == calldatas.length, "GovernorBravo::propose: proposal function information arity mismatch");
-      //  require(targets.length != 0, "GovernorBravo::propose: must provide actions");
-      //  require(targets.length <= proposalMaxOperations, "GovernorBravo::propose: too many actions");
-
-        uint latestProposalId = latestProposalIds[msg.sender];
-        if (latestProposalId != 0) {
-          ProposalState proposersLatestProposalState = state(latestProposalId);
-          require(proposersLatestProposalState != ProposalState.Active, "GovernorBravo::propose: one live proposal per proposer, found an already active proposal");
-          require(proposersLatestProposalState != ProposalState.Pending, "GovernorBravo::propose: one live proposal per proposer, found an already pending proposal");
-        }
-
-
         uint startBlock = block.number;
         uint endBlock = startBlock.add(votingPeriod); //add(startBlock, votingPeriod);
 
         proposalCount++;
 
-        Proposal memory newProposal = Proposal({
-            id: proposalCount,
-            proposer: msg.sender,
-            eta: 0,
-            targets: targets,
-            values: values,
-            calldatas: calldatas,
-            startBlock: startBlock,
-            endBlock: endBlock,
-            forVotes: 0,
-            againstVotes: 0,
-            canceled: false,
-            executed: false
-        });
+        Proposal storage newProposal = proposals[proposalCount];
 
-        proposals[newProposal.id] = newProposal;
-        latestProposalIds[newProposal.proposer] = newProposal.id;
+        newProposal.id = proposalCount;
+        newProposal.proposer = msg.sender;
+        newProposal.targets = targets;
+        newProposal.values = values;
+        newProposal.calldatas = calldatas;
+        newProposal.forVotes = 0;
+        newProposal.againstVotes = 0;
+        newProposal.executed = false;
+        newProposal.startBlock = startBlock;
+        newProposal.endBlock = endBlock;
 
         emit ProposalCreated(newProposal.id, msg.sender, targets, values, calldatas, startBlock, endBlock, description);
+
         return newProposal.id;
     }
 
-    // Надо перенести в либу
-    function sub256(uint256 a, uint256 b) internal pure returns (uint) {
-        require(b <= a, "subtraction underflow");
-        return a - b;
+    /**
+      * @notice Queues a proposal of state succeeded
+      * @param proposalId The id of the proposal to queue
+      */
+    function queue(uint proposalId) external {
+        require(getState(proposalId) == ProposalState.Succeeded, "GovernorBravo::queue: proposal can only be queued if it is succeeded");
+        Proposal storage proposal = proposals[proposalId];
+        uint eta = block.timestamp.add(timelock.delay());
+
+        for (uint i = 0; i < proposal.targets.length; i++) {
+            queueOrRevertInternal(proposal.targets[i], proposal.values[i], proposal.calldatas[i], eta);
+        }
+
+        proposal.eta = eta;
     }
 
-    function getChainIdInternal() internal pure returns (uint) {
-        uint chainId;
-        assembly { chainId := chainid() }
-        return chainId;
+    // Зачем  signature?
+
+     function queueOrRevertInternal(address target, uint value, bytes memory data, uint eta) internal {
+        require(!timelock.queuedTransactions(keccak256(abi.encode(target, value, data, eta))), "GovernorBravo::queueOrRevertInternal: identical proposal action already queued at eta");
+        timelock.queueTransaction(target, value, data, eta);
+    }
+
+
+     function getState(uint proposalId) public view returns (ProposalState state) {
+
+        require(proposalCount >= proposalId && proposalId > 0, "Invalid proposal id");
+
+        Proposal storage proposal = proposals[proposalId];
+
+        if (proposal.canceled) {
+            return ProposalState.Canceled;
+        } else if (block.number <= proposal.endBlock) {
+            return ProposalState.Active;
+        } else if (proposal.forVotes <= proposal.againstVotes || proposal.forVotes < getQuorum()) {
+            return ProposalState.Defeated;
+        } else if (proposal.executed) {
+            return ProposalState.Executed;
+        } else if (block.timestamp >= proposal.eta.add(timelock.GRACE_PERIOD())) { // Доделать
+            return ProposalState.Expired;
+        } else {
+            return ProposalState.Queued;
+        }
+    }
+
+
+    function getQuorum()
+    public view returns (uint256) {
+        return (token.totalSupply() * _quorumNumerator) / 100;
+    }
+
+
+    function getChainIdInternal() internal view returns (uint) {
+        return block.chainid;
     }
 }

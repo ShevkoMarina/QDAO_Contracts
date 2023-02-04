@@ -14,14 +14,14 @@ contract QDAOTimelockController is QDAOTimelockInterface {
     // Новый администратор в процессе перехода
     address public pendingAdmin;
 
-
     // Задержка перед выполнением транзакции
     uint public delay;
-
+    
     uint public constant GRACE_PERIOD = 14 days;
     uint public constant MINIMUM_DELAY = 2 days;
     uint public constant MAXIMUM_DELAY = 30 days;
 
+    mapping (bytes32 => bool) public queuedTransactions;
 
     constructor(address admin_, uint delay_) {
             require(delay_ >= MINIMUM_DELAY, "QDAOTimelockController::constructor: Delay must exceed minimum delay.");
@@ -45,22 +45,21 @@ contract QDAOTimelockController is QDAOTimelockInterface {
         _;
     }
 
-    // Модуль работы с выполнением предложений
+    // Модуль работы с предложениями
 
     /// @notice Поставить транзакцию в очередь
     function queueTransaction(
         address target,
         uint value,
-        string memory signature,
         bytes memory data,
         uint eta) 
         public onlyAdmin returns (bytes32) {
 
             require(eta >= getBlockTimestamp().add(delay), "QDAOTimelockController::queueTransaction: Estimated execution block must satisfy delay.");
 
-            bytes32 txHash = keccak256(abi.encode(target, value, signature, data, eta));
+            bytes32 txHash = keccak256(abi.encode(target, value, data, eta));
+            queuedTransactions[txHash] = true;
 
-            emit QueueTransaction(txHash, target, value, signature, data, eta);
             return txHash;
         }
 
@@ -68,42 +67,32 @@ contract QDAOTimelockController is QDAOTimelockInterface {
     function cancelTransaction(
         address target,
         uint value,
-        string memory signature, 
         bytes memory data, 
         uint eta) public onlyAdmin {
       
-        bytes32 txHash = keccak256(abi.encode(target, value, signature, data, eta));
-    
-        emit CancelTransaction(txHash, target, value, signature, data, eta);
+        bytes32 txHash = keccak256(abi.encode(target, value, data, eta));
+        queuedTransactions[txHash] = false;
     }
 
     // Выполнять поставленные в очередь транзакции может только администратор
     function executeTransaction(
         address target, 
         uint value, 
-        string memory signature, 
         bytes memory data, 
         uint eta) 
         public payable onlyAdmin returns (bytes memory) {
 
-        bytes32 txHash = keccak256(abi.encode(target, value, signature, data, eta));
+        bytes32 txHash = keccak256(abi.encode(target, value, data, eta));
        
+        require(queuedTransactions[txHash], "Timelock::executeTransaction: Transaction hasn't been queued.");
         require(getBlockTimestamp() >= eta, "QDAOTimelockController::executeTransaction: Transaction hasn't surpassed time lock.");
         require(getBlockTimestamp() <= eta.add(GRACE_PERIOD), "QDAOTimelockController::executeTransaction: Transaction is stale.");
 
-        bytes memory callData;
-
-        if (bytes(signature).length == 0) {
-            callData = data;
-        } else {
-            callData = abi.encodePacked(bytes4(keccak256(bytes(signature))), data);
-        }
+        queuedTransactions[txHash] = false;
 
         // solium-disable-next-line security/no-call-value
-        (bool success, bytes memory returnData) = target.call{value: value}(callData);
+        (bool success, bytes memory returnData) = target.call{value: value}(data);
         require(success, "QDAOTimelockController::executeTransaction: Transaction execution reverted.");
-
-        emit ExecuteTransaction(txHash, target, value, signature, data, eta);
 
         return returnData;
     }
@@ -113,15 +102,12 @@ contract QDAOTimelockController is QDAOTimelockInterface {
         return block.timestamp;
     }
 
-    // Модуль работы с администрированием
-
+    // Передача организации другому лицу
 
     // Установить нового администратора в обработку
     function setPendingAdmin(address pendingAdmin_) public onlyTimelock {
         require(msg.sender == address(this), "QDAOTimelockController::setPendingAdmin: Call must come from Timelock.");
         pendingAdmin = pendingAdmin_;
-
-        emit NewPendingAdmin(pendingAdmin);
     }
 
     // Новый администратор подтверждает и становится новым администратором
@@ -129,8 +115,6 @@ contract QDAOTimelockController is QDAOTimelockInterface {
         require(msg.sender == pendingAdmin, "QDAOTimelockController::acceptAdmin: Call must come from pendingAdmin.");
         admin = msg.sender;
         pendingAdmin = address(0);
-
-        emit NewAdmin(admin);
     }
 
     // Модуль работы с кризисной ситуацией

@@ -33,4 +33,8 @@ contract QDAOToken is ERC20, ERC20Permit, ERC20Votes, Ownable {
     {
         super._burn(account, amount);
     }
+
+    function getPriorVotes(address account) external view returns (uint256 votes) {
+      return balanceOf(account);
+  }
 }
