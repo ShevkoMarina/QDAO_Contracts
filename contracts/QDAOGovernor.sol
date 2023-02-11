@@ -10,6 +10,20 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
 
     using SafeMath for uint;
 
+    function _governor() external view returns (address) {
+        return address(this);
+    }
+
+    modifier onlyGovernor() {
+        require(this._governor() == msg.sender, "Caller is not the DAOGovernor");
+        _;
+    }
+
+    function updateVotingPeriod(uint _newValue) public onlyGovernor {
+        votingPeriod = _newValue;
+    }
+
+
     function initialize(
         address _timelock,
         address _token,
@@ -17,10 +31,10 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         public {
 
         timelock = QDAOTimelockInterface(_timelock);
-        token = QDAOTokenInterface(_token);
+        token = QDAOTokenV0Interface(_token);
         votingPeriod = _votingPeriod;
+        quorumNumerator = 5;
     }
-
 
     function createProposal(
         address[] memory targets,
@@ -69,12 +83,20 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
     }
 
     // Зачем  signature?
-
      function queueOrRevertInternal(address target, uint value, bytes memory data, uint eta) internal {
         require(!timelock.queuedTransactions(keccak256(abi.encode(target, value, data, eta))), "GovernorBravo::queueOrRevertInternal: identical proposal action already queued at eta");
         timelock.queueTransaction(target, value, data, eta);
     }
 
+    function execute(uint proposalId) external payable {
+        require(getState(proposalId) == ProposalState.Queued, "GovernorBravo::execute: proposal can only be executed if it is queued");
+        Proposal storage proposal = proposals[proposalId];
+        proposal.executed = true;
+
+        for (uint i = 0; i < proposal.targets.length; i++) {
+            timelock.executeTransaction(proposal.targets[i], proposal.values[i], proposal.calldatas[i], proposal.eta);
+        }
+    }
 
      function getState(uint proposalId) public view returns (ProposalState state) {
 
@@ -97,12 +119,44 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         }
     }
 
+    function vote(
+        uint proposalId,
+        bool support) 
+        internal returns (uint256) {
 
-    function getQuorum()
-    public view returns (uint256) {
-        return (token.totalSupply() * _quorumNumerator) / 100;
+        address voter = msg.sender;
+
+        Proposal storage proposal = proposals[proposalId];
+        require(getState(proposalId) == ProposalState.Active, "Proposal state must be active");
+
+        Receipt storage receipts = proposal.receipts[voter];
+        require(receipts.hasVoted == false, 'Voter already voted');
+
+        uint256 weight = getVotes(voter);
+        require(weight > 0, "Voter has no dao tokens");
+
+        if (support) {
+            proposal.forVotes += weight;
+        } else {
+            proposal.againstVotes += weight;
+        }
+
+        receipts.hasVoted = true;
+        receipts.support = support;
+        receipts.votes = weight;
+
+        return weight;
     }
 
+
+    function getVotes( address account) internal view returns (uint256) {
+        return token.getCurrentVotes(account);
+    }
+
+
+    function getQuorum() public view returns (uint256) {
+        return (token.totalSupply() * quorumNumerator) / 100;
+    }
 
     function getChainIdInternal() internal view returns (uint) {
         return block.chainid;

@@ -4,7 +4,7 @@ pragma solidity ^0.8.10;
 import "./SafeMath.sol";
 import "./QDAOGovernorInterfaces.sol";
 
-contract QDAOTimelockController is QDAOTimelockInterface {
+contract QDAOTimelock is QDAOTimelockInterface {
 
     using SafeMath for uint;
 

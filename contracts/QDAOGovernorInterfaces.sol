@@ -37,7 +37,7 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
     QDAOTimelockInterface public timelock;
 
     /// @notice The address of the QDAO token
-    QDAOTokenInterface public token;
+    QDAOTokenV0Interface public token;
 
     /// @notice The official record of all proposals ever proposed
     mapping (uint => Proposal) public proposals;
@@ -92,7 +92,7 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
         bool support;
 
         /// @notice The number of votes the voter had, which were cast
-        uint96 votes;
+        uint256 votes;
     }
 
     /// @notice Possible states that a proposal may be in
@@ -106,7 +106,7 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
         Executed
     }
     
-    uint public _quorumNumerator;
+    uint public quorumNumerator;
 }
 
 interface QDAOTimelockInterface {
@@ -122,5 +122,10 @@ interface QDAOTimelockInterface {
 
 interface QDAOTokenInterface {
     function getPastVotes(address account, uint blockNumber) external view returns (uint96);
+    function totalSupply() external view returns (uint256);
+}
+
+interface QDAOTokenV0Interface {
+    function getCurrentVotes(address account) external view returns (uint256);
     function totalSupply() external view returns (uint256);
 }

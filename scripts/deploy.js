@@ -7,31 +7,32 @@
 const hre = require("hardhat");
 
 async function main() {
-  /*const currentTimestampInSeconds = Math.round(Date.now() / 1000);
-  const ONE_YEAR_IN_SECS = 365 * 24 * 60 * 60;
-  const unlockTime = currentTimestampInSeconds + ONE_YEAR_IN_SECS;
 
-  const lockedAmount = hre.ethers.utils.parseEther("1");
+  var ownerAddress = "0x75c09fb19051f8F13B0C8BdD7e7c3BE123821C77";
 
-  const Lock = await hre.ethers.getContractFactory("Lock");
-  const lock = await Lock.deploy(unlockTime, { value: lockedAmount });
+  /*
+  const QDAOToken = await ethers.getContractFactory("QDAOToken");
+  const token = await QDAOToken.deploy(ownerAddress);
+  console.log("QDAOToken deployed to address:", token.address);
 
-  await lock.deployed();
+  const QDAOTimelock = await ethers.getContractFactory("QDAOTimelock");
+  const timelock = await QDAOTimelock.deploy(ownerAddress, 2*24*60*60);
+  console.log("QDAOTimelock deployed to address:", timelock.address);
 
-  console.log(
-    `Lock with 1 ETH and unlock timestamp ${unlockTime} deployed to ${lock.address}`
-  );
-  */
+  const QDAOGovernor = await ethers.getContractFactory("QDAOGovernor");
+  const governor = await QDAOGovernor.deploy();
+  console.log("QDAOGovernor deployed to address:", governor.address);
+*/
+  const QDAOGovernorDelegator = await ethers.getContractFactory("QDAOGovernorDelegator");
+  const delegator = await QDAOGovernorDelegator.deploy(
+    "0xB289545bBF4443b03CC44F8BaF65E86DAF9d90A9",
+    "0xc78EB1c2d7b19C087B5d00Ea9D980D4746e7Bc39",
+    ownerAddress,
+    "0x2980343ce6E94aA17c5499139AB3532D98095321", 
+    5);
 
-  const http = require('http');
+  console.log("QDAOGovernorDelegator deployed to address:", delegator.address);
 
-  const requestListener = function (req, res) {
-    res.writeHead(200);
-    res.end('Hello, World!');
-  }
-  
-  const server = http.createServer(requestListener);
-  server.listen(8080);
 }
 
 // We recommend this pattern to be able to use async/await everywhere
