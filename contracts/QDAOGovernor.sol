@@ -71,22 +71,76 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
       * @param proposalId The id of the proposal to queue
       */
     function queue(uint proposalId) external {
-        require(getState(proposalId) == ProposalState.Succeeded, "GovernorBravo::queue: proposal can only be queued if it is succeeded");
-        Proposal storage proposal = proposals[proposalId];
-        uint eta = block.timestamp.add(timelock.delay());
 
-        for (uint i = 0; i < proposal.targets.length; i++) {
-            queueOrRevertInternal(proposal.targets[i], proposal.values[i], proposal.calldatas[i], eta);
+        require(getState(proposalId) == ProposalState.Succeeded || getState(proposalId) == ProposalState.NoQuorum, "Invalid proposal state");
+
+        if (getState(proposalId) == ProposalState.NoQuorum) {
+
+            Proposal storage proposal = proposals[proposalId];
+
+            uint8 approvals = 0;
+            for (uint8 i = 0; i < multisig.signers.length; i++) 
+            {
+                if (proposal.hasApproved[multisig.signers[i]]) 
+                {
+                   approvals++;
+                }
+            }
+            
+            require(approvals >= multisig.requiredApprovals, "Not enough approvals");
+
+            uint eta = block.timestamp.add(timelock.delay());
+
+            for (uint i = 0; i < proposal.targets.length; i++) {
+                queueOrRevertInternal(proposal.targets[i], proposal.values[i], proposal.calldatas[i], eta);
+            }
+
+            proposal.eta = eta;
+            proposal.queued = true;
         }
+        else if (getState(proposalId) == ProposalState.Succeeded)
+        {
+            Proposal storage proposal = proposals[proposalId];
+            uint eta = block.timestamp.add(timelock.delay());
 
-        proposal.eta = eta;
+            for (uint i = 0; i < proposal.targets.length; i++) {
+                queueOrRevertInternal(proposal.targets[i], proposal.values[i], proposal.calldatas[i], eta);
+            }
+
+            proposal.eta = eta;
+            proposal.queued = true;
+        }
     }
 
-    // Зачем  signature?
      function queueOrRevertInternal(address target, uint value, bytes memory data, uint eta) internal {
         require(!timelock.queuedTransactions(keccak256(abi.encode(target, value, data, eta))), "GovernorBravo::queueOrRevertInternal: identical proposal action already queued at eta");
         timelock.queueTransaction(target, value, data, eta);
     }
+
+    function createMultisig(address[] memory signers, uint8 requiredApprovals) public {
+
+        MultiSig storage newMultisig = multisig;
+        newMultisig.signers = signers;
+        newMultisig.requiredApprovals = requiredApprovals;
+    }
+
+    function approve(uint proposalId) public {
+        Proposal storage proposal = proposals[proposalId];
+
+        require(containsValue(multisig.signers, msg.sender), "Signer is not from list of principals");
+        require(proposal.hasApproved[msg.sender] == false, "Signer has already approved");
+        proposal.hasApproved[msg.sender] = true;
+    }
+
+    function containsValue(address[] memory array, address value) public pure returns (bool) {
+    for (uint i = 0; i < array.length; i++) {
+        if (array[i] == value) {
+            return true;
+        }
+    }
+    return false;
+}
+
 
     function execute(uint proposalId) external payable {
         require(getState(proposalId) == ProposalState.Queued, "GovernorBravo::execute: proposal can only be executed if it is queued");
@@ -106,17 +160,25 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
 
         if (proposal.canceled) {
             return ProposalState.Canceled;
-        } else if (block.number <= proposal.endBlock) {
+        }
+        else if (block.number <= proposal.endBlock) {
             return ProposalState.Active;
-        } else if (proposal.forVotes <= proposal.againstVotes || proposal.forVotes < getQuorum()) {
+        } 
+        else if (proposal.forVotes < proposal.againstVotes) {
             return ProposalState.Defeated;
-        } else if (proposal.executed) {
+        } 
+        else if (proposal.executed) {
             return ProposalState.Executed;
-        } else if (block.timestamp >= proposal.eta.add(timelock.GRACE_PERIOD())) { // Доделать
-            return ProposalState.Expired;
-        } else {
+        } 
+       // else if (block.timestamp >= proposal.eta.add(timelock.GRACE_PERIOD())) { // Доделать
+        //    return ProposalState.Expired;
+       // } 
+       else if (proposal.queued) {
             return ProposalState.Queued;
         }
+        else if (proposal.forVotes < getQuorum()){
+            return ProposalState.NoQuorum;
+        } 
     }
 
     function vote(

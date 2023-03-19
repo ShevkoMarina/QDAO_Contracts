@@ -53,7 +53,7 @@ contract QDAOTimelock is QDAOTimelockInterface {
         uint value,
         bytes memory data,
         uint eta) 
-        public onlyAdmin returns (bytes32) {
+        public returns (bytes32) {
 
             require(eta >= getBlockTimestamp().add(delay), "QDAOTimelockController::queueTransaction: Estimated execution block must satisfy delay.");
 

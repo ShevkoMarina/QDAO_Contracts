@@ -39,6 +39,8 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
     /// @notice The address of the QDAO token
     QDAOTokenV0Interface public token;
 
+    MultiSig public multisig;
+
     /// @notice The official record of all proposals ever proposed
     mapping (uint => Proposal) public proposals;
 
@@ -79,8 +81,14 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
         /// @notice Flag marking whether the proposal has been executed
         bool executed;
 
+        bool queued;
+
+       // bool approvedByPricipals;
+
         /// @notice Receipts of ballots for the entire set of voters
         mapping (address => Receipt) receipts;
+
+        mapping(address => bool) hasApproved;
     }
 
     /// @notice Ballot receipt record for a voter
@@ -95,11 +103,22 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
         uint256 votes;
     }
 
+    //uint256 public multisigCount;
+
+    //mapping(uint => MultiSig) public multisigs;
+
+    /// @notice A list of principals for crisis situation
+    struct MultiSig {
+        address[] signers;
+        uint8 requiredApprovals;
+    }
+
     /// @notice Possible states that a proposal may be in
     enum ProposalState {
         Active,
         Canceled,
         Defeated,
+        NoQuorum,
         Succeeded,
         Queued,
         Expired,
