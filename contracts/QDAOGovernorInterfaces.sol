@@ -4,7 +4,22 @@ pragma solidity ^0.8.10;
 
 contract GovernorEvents {
     /// @notice An event emitted when a new proposal is created
-    event ProposalCreated(uint id, address proposer, address[] targets, uint[] values, bytes[] calldatas, uint startBlock, uint endBlock, string description);
+    event ProposalCreated(uint id, address proposer, address[] targets, uint[] values, bytes[] calldatas, uint startBlock, uint endBlock);
+
+    /// @notice An event emitted when a proposal has been canceled 
+    event ProposalCanceled(uint id);
+
+    /// @notice An event emitted when a proposal has been queued in the Timelock
+    event ProposalQueued(uint id, uint eta);
+
+    /// @notice An event emitted when a proposal has been executed in the Timelock
+    event ProposalExecuted(uint id);
+
+    /// @notice An event emitted when the voting period is set
+    event VotingPeriodSet(uint oldVotingPeriod, uint newVotingPeriod);
+
+    /// @notice An event emitted when a vote has been cast on a proposal 
+    event VoteCasted(address indexed voter, uint proposalId, bool support, uint votes);
 }
 
 contract QDAOGovernorDelegatorStorage {
@@ -14,16 +29,13 @@ contract QDAOGovernorDelegatorStorage {
     /// @notice Pending administrator for this contract
     address public pendingAdmin;
 
-    /// @notice Active brains of Governor
+    /// @notice Active implementation of Governor
     address public implementation;
 }
 
 
 /**
- * @title Storage for Governor Bravo Delegate
- * @notice For future upgrades, do not change GovernorBravoDelegateStorageV1. Create a new
- * contract which implements GovernorBravoDelegateStorageV1 and following the naming convention
- * GovernorBravoDelegateStorageVX.
+ * @title Storage for Governor Delegator
  */
 contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
 
@@ -39,9 +51,10 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
     /// @notice The address of the QDAO token
     QDAOTokenV0Interface public token;
 
+    /// @notice Multisig with addresses of principals who approve proposals in crisis sutuation
     MultiSig public multisig;
 
-    /// @notice The official record of all proposals ever proposed
+    /// @notice The record of all proposals ever proposed
     mapping (uint => Proposal) public proposals;
 
     struct Proposal {
@@ -81,13 +94,13 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
         /// @notice Flag marking whether the proposal has been executed
         bool executed;
 
+        /// @notice Flag marking whether the proposal has been queued
         bool queued;
-
-       // bool approvedByPricipals;
 
         /// @notice Receipts of ballots for the entire set of voters
         mapping (address => Receipt) receipts;
 
+        /// @notice Approvals from principals
         mapping(address => bool) hasApproved;
     }
 
@@ -103,13 +116,14 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
         uint256 votes;
     }
 
-    //uint256 public multisigCount;
 
-    //mapping(uint => MultiSig) public multisigs;
-
-    /// @notice A list of principals for crisis situation
+    /// @notice A list of principals who can manage crisis situation
     struct MultiSig {
+
+        /// @notice A list of principal's addresses who can manage crisis situation
         address[] signers;
+
+        /// @notice A number of required approvals from principals
         uint8 requiredApprovals;
     }
 
@@ -125,13 +139,13 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
         Executed
     }
     
+    /// @notice Quorum numerator
     uint public quorumNumerator;
 }
 
 interface QDAOTimelockInterface {
 
     function delay() external view returns (uint);
-    function GRACE_PERIOD() external view returns (uint);
     function acceptAdmin() external;
     function queuedTransactions(bytes32 hash) external view returns (bool);
     function queueTransaction(address target, uint value, bytes calldata data, uint eta) external returns (bytes32);

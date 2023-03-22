@@ -210,6 +210,8 @@ describe("Governor:Proposal tests", function () {
     });
 });
 
+// Проверить что не разолбало статусы
+
 const ProposalState  = {
     Active: 0,
     Canceled: 1,

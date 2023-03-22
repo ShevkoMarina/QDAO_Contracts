@@ -35,6 +35,8 @@ contract QDAOGovernorDelegator is QDAOGovernorDelegatorStorage, GovernorEvents {
 
         address oldImplementation = implementation;
         implementation = implementation_;
+
+        emit NewImplementation(oldImplementation, implementation);
     }
 
     /**
