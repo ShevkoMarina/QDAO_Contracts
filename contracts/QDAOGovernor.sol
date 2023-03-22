@@ -31,17 +31,46 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
     function initialize(
         address _timelock,
         address _token,
-        uint _votingPeriod) 
+        uint _votingPeriod,
+        uint _quorumNumerator) 
         public onlyAdmin {
         
         require(address(timelock) == address(0), "QDAOGovernor::initialize: can be only be initialized once");
         require(_timelock != address(0), "QDAOGovernor::initialize: invalid timelock address");
-        require(_token != address(0), "QDAOGovernor::initialize: invalid comp address");
+        require(_token != address(0), "QDAOGovernor::initialize: invalid token address");
 
         timelock = QDAOTimelockInterface(_timelock);
         token = QDAOTokenV0Interface(_token);
         votingPeriod = _votingPeriod;
-        quorumNumerator = 5;
+        quorumNumerator = _quorumNumerator;
+    }
+
+    function createMultisig(
+        address[] memory signers,
+        uint8 requiredApprovals) onlyAdmin 
+        public {
+
+        MultiSig storage newMultisig = multisig;
+        newMultisig.signers = signers;
+        newMultisig.requiredApprovals = requiredApprovals;
+    }
+
+    function approve(uint proposalId) public {
+        Proposal storage proposal = proposals[proposalId];
+
+        require(containsValue(multisig.signers, msg.sender), "QDAOGovernor::approve: signer is not from list of principals");
+        require(proposal.hasApproved[msg.sender] == false, "QDAOGovernor::approve: signer has already approved");
+        proposal.hasApproved[msg.sender] = true;
+    }
+
+    function containsValue(address[] memory array, address value) public pure returns (bool) {
+        for (uint i = 0; i < array.length; i++) {
+            if (array[i] == value) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     function createProposal(
@@ -49,6 +78,8 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         uint[] memory values, 
         bytes[] memory calldatas) 
         public returns (uint) {
+
+        require(address(timelock) != address(0), "QDAOGovernor::createProposal: Governor is not initialized");
 
         uint startBlock = block.number;
         uint endBlock = startBlock.add(votingPeriod);
@@ -73,7 +104,7 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         return newProposal.id;
     }
 
-    function queue(uint proposalId) external {
+    function queueProposal(uint proposalId) external {
 
         require(getState(proposalId) == ProposalState.Succeeded, "QDAOGovernor::queue: proposal must have Succeded state");
 
@@ -86,23 +117,18 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
 
         proposal.eta = eta;
         proposal.queued = true;
+
+        emit ProposalQueued(proposalId, eta);
     }
 
-    function queueForCrisisManagement(uint proposalId) internal onlyAdmin {
-
+    function queueProposalWithNoQuorum(uint proposalId) internal onlyAdmin {
+        require(multisig.signers.length > 0, "QDAOGovernor::queueForCrisisManagement: list of principals is empty");
         require(getState(proposalId) == ProposalState.NoQuorum, "QDAOGovernor::queueForCrisisManagement: proposal must have NoQuorum state");
 
         Proposal storage proposal = proposals[proposalId];
 
-        uint8 approvals = 0;
-        for (uint8 i = 0; i < multisig.signers.length; i++) 
-        {
-            if (proposal.hasApproved[multisig.signers[i]]) 
-            {
-                approvals++;
-            }
-        }
-        
+        uint8 approvals = calculateApprovals(proposal);
+    
         require(approvals >= multisig.requiredApprovals, "QDAOGovernor::queueForCrisisManagement: not enough approvals from principals");
 
         uint eta = block.timestamp.add(timelock.delay());
@@ -113,6 +139,8 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
 
         proposal.eta = eta;
         proposal.queued = true;
+
+        emit ProposalQueued(proposalId, eta);
     }
 
     function queueOrRevertInternal(address target, uint value, bytes memory data, uint eta) internal {
@@ -120,32 +148,21 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         timelock.queueTransaction(target, value, data, eta);
     }
 
-    function createMultisig(address[] memory signers, uint8 requiredApprovals) public {
+    function calculateApprovals(Proposal storage proposal) internal view returns (uint8) {
 
-        MultiSig storage newMultisig = multisig;
-        newMultisig.signers = signers;
-        newMultisig.requiredApprovals = requiredApprovals;
-    }
-
-    function approve(uint proposalId) public {
-        Proposal storage proposal = proposals[proposalId];
-
-        require(containsValue(multisig.signers, msg.sender), "QDAOGovernor::approve: signer is not from list of principals");
-        require(proposal.hasApproved[msg.sender] == false, "QDAOGovernor::approve: signer has already approved");
-        proposal.hasApproved[msg.sender] = true;
-    }
-
-    function containsValue(address[] memory array, address value) public pure returns (bool) {
-    for (uint i = 0; i < array.length; i++) {
-        if (array[i] == value) {
-            return true;
+        uint8 approvals = 0;
+        for (uint8 i = 0; i < multisig.signers.length; i++) 
+        {
+            if (proposal.hasApproved[multisig.signers[i]]) 
+            {
+                approvals++;
+            }
         }
-    }
-    return false;
+
+        return approvals;
     }
 
-
-    function execute(uint proposalId) external payable {
+    function executeProposal(uint proposalId) external payable {
         require(getState(proposalId) == ProposalState.Queued, "QDAOGovernor::execute: proposal can only be executed if it is queued");
         Proposal storage proposal = proposals[proposalId];
         proposal.executed = true;
@@ -153,7 +170,26 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         for (uint i = 0; i < proposal.targets.length; i++) {
             timelock.executeTransaction(proposal.targets[i], proposal.values[i], proposal.calldatas[i], proposal.eta);
         }
+
+        emit ProposalExecuted(proposalId);
     }
+
+
+    function cancelProposal(uint proposalId) external {
+        require(getState(proposalId) != ProposalState.Executed, "QDAOGovernor::cancel: cannot cancel executed proposal");
+
+        Proposal storage proposal = proposals[proposalId];
+
+        require(msg.sender == proposal.proposer || msg.sender == admin, "QDAOGovernor::cancel: only proposer or admin can cancel the proposal");
+        
+        proposal.canceled = true;
+        for (uint i = 0; i < proposal.targets.length; i++) {
+            timelock.cancelTransaction(proposal.targets[i], proposal.values[i], proposal.calldatas[i], proposal.eta);
+        }
+
+        emit ProposalCanceled(proposalId);
+    }
+
 
      function getState(uint proposalId) public view returns (ProposalState state) {
 
@@ -167,18 +203,24 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         else if (block.number <= proposal.endBlock) {
             return ProposalState.Active;
         } 
-        else if (proposal.forVotes < proposal.againstVotes) {
+        else if (proposal.forVotes <= proposal.againstVotes && proposal.forVotes >= getQuorum()) {
             return ProposalState.Defeated;
         } 
+        else if (proposal.eta == 0 || calculateApprovals(proposal) > multisig.requiredApprovals) {
+            return ProposalState.Succeeded;
+        } 
+        else if (proposal.forVotes < getQuorum()) {
+            return ProposalState.NoQuorum;
+        }
         else if (proposal.executed) {
             return ProposalState.Executed;
         } 
-        else if (proposal.queued) {
+        else if (block.timestamp >= proposal.eta.add(timelock.GRACE_PERIOD())) {
+            return ProposalState.Expired;
+        } 
+        else {
             return ProposalState.Queued;
         }
-        else if (proposal.forVotes < getQuorum()){
-            return ProposalState.NoQuorum;
-        } 
     }
 
     function vote(
@@ -209,6 +251,8 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
 
         return weight;
     }
+
+    
 
 
     function getVotes(address account) internal view returns (uint256) {

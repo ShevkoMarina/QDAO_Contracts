@@ -146,6 +146,7 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
 interface QDAOTimelockInterface {
 
     function delay() external view returns (uint);
+    function GRACE_PERIOD() external view returns (uint);
     function acceptAdmin() external;
     function queuedTransactions(bytes32 hash) external view returns (bool);
     function queueTransaction(address target, uint value, bytes calldata data, uint eta) external returns (bytes32);
@@ -160,5 +161,5 @@ interface QDAOTokenInterface {
 
 interface QDAOTokenV0Interface {
     function getCurrentVotes(address account) external view returns (uint256);
-    function totalSupply() external view returns (uint256);
+    function totalSupply() external view returns (uint256); 
 }
