@@ -1,5 +1,5 @@
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "./QDAOGovernorInterfaces.sol";
+import "./QDAOInterfaces.sol";
 
 contract QDAOTokenV0 is ERC20 {
 

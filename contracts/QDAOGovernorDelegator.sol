@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 pragma solidity ^0.8.10;
 
-import "./QDAOGovernorInterfaces.sol";
+import "./QDAOInterfaces.sol";
 
 contract QDAOGovernorDelegator is QDAOGovernorDelegatorStorage, GovernorEvents {
 
