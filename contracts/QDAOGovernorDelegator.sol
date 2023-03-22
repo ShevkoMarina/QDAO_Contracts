@@ -5,6 +5,8 @@ import "./QDAOGovernorInterfaces.sol";
 
 contract QDAOGovernorDelegator is QDAOGovernorDelegatorStorage, GovernorEvents {
 
+    event NewImplementation(address oldImplementation, address implementation);
+
 	constructor (
 			address _timelock,
 			address _token,
@@ -12,39 +14,31 @@ contract QDAOGovernorDelegator is QDAOGovernorDelegatorStorage, GovernorEvents {
 	        address _implementation,
 	        uint _votingPeriod) public {
                 
-                admin = msg.sender;
+        admin = msg.sender;
 
-                delegateTo(_implementation, abi.encodeWithSignature("initialize(address,address,uint256)",
-                                                                    _timelock,
-                                                                    _token,
-                                                                    _votingPeriod));
+        delegateTo(_implementation, abi.encodeWithSignature("initialize(address,address,uint256)",
+                                                            _timelock,
+                                                            _token,
+                                                            _votingPeriod));
 
-                _setImplementation(_implementation);
+        setImplementation(_implementation);
 
-                admin = _admin;
+        admin = _admin;
 	}
 
 
-	/**
-     * @notice Called by the admin to update the implementation of the delegator
-     * @param implementation_ The address of the new implementation for delegation
-     */
-    function _setImplementation(address implementation_) public {
-        require(msg.sender == admin, "QDAOGovernorDelegator::_setImplementation: admin only");
-        require(implementation_ != address(0), "QDAOGovernorDelegator::_setImplementation: invalid implementation address");
+	/// @notice Called by the admin to update the implementation of the delegator
+    function setImplementation(address _implementation) public {
+        require(msg.sender == admin, "QDAOGovernorDelegator::setImplementation: admin only");
+        require( _implementation != address(0), "QDAOGovernorDelegator::setImplementation: invalid implementation address");
 
         address oldImplementation = implementation;
-        implementation = implementation_;
+        implementation =  _implementation;
 
         emit NewImplementation(oldImplementation, implementation);
     }
 
-    /**
-     * @notice Internal method to delegate execution to another contract
-     * @dev It returns to the external caller whatever the implementation returns or forwards reverts
-     * @param callee The contract to delegatecall
-     * @param data The raw data to delegatecall
-     */
+    /// @notice Internal method to delegate execution to another contract
     function delegateTo(address callee, bytes memory data) internal {
         (bool success, bytes memory returnData) = callee.delegatecall(data);
         assembly {
