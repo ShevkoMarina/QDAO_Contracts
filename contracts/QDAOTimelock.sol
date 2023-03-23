@@ -2,7 +2,8 @@
 pragma solidity ^0.8.10;
 
 import "./SafeMath.sol";
-import "./QDAOGovernorInterfaces.sol";
+import "./QDAOInterfaces.sol";
+import "hardhat/console.sol";
 
 contract QDAOTimelock is QDAOTimelockInterface {
 
@@ -23,7 +24,11 @@ contract QDAOTimelock is QDAOTimelockInterface {
 
     address public pendingAdmin;
 
+    address public delegator;
+
     uint public delay;
+
+    address public contractAddress;
 
     mapping (bytes32 => bool) public queuedTransactions;
 
@@ -34,10 +39,18 @@ contract QDAOTimelock is QDAOTimelockInterface {
 
         admin = _admin;
         delay = _delay;
+        contractAddress = address(this);
     }
 
     modifier onlyAdmin() {
         require(this.admin() == msg.sender, "QDAOTimelock::onlyAdmin: Caller is not the admin");
+        _;
+    }
+
+
+     modifier onlyGovernorDelegator() {
+        require(delegator != address(0), "QDAOTimelock::onlyGovernorDelegator: Delegator is not set");
+        require(this.delegator() == msg.sender, "QDAOTimelock::onlyGovernorDelegator: Caller is not the QDAOGovernorDelegator");
         _;
     }
 
@@ -53,8 +66,9 @@ contract QDAOTimelock is QDAOTimelockInterface {
         uint value,
         bytes memory data,
         uint eta) 
-        public onlyAdmin returns (bytes32)  {
+        public onlyGovernorDelegator returns (bytes32)  {
 
+            console.log("Timelock caller: ", msg.sender);
             require(eta >= getBlockTimestamp().add(delay), "QDAOTimelock::queueTransaction: Estimated execution block must satisfy delay.");
 
             bytes32 txHash = keccak256(abi.encode(target, value, data, eta));
@@ -71,7 +85,7 @@ contract QDAOTimelock is QDAOTimelockInterface {
         address target,
         uint value,
         bytes memory data, 
-        uint eta) public onlyAdmin {
+        uint eta) public onlyGovernorDelegator {
       
         bytes32 txHash = keccak256(abi.encode(target, value, data, eta));
         queuedTransactions[txHash] = false;
@@ -85,7 +99,7 @@ contract QDAOTimelock is QDAOTimelockInterface {
         uint value, 
         bytes memory data, 
         uint eta) 
-        public payable onlyAdmin returns (bytes memory) {
+        public payable onlyGovernorDelegator returns (bytes memory) {
 
         bytes32 txHash = keccak256(abi.encode(target, value, data, eta));
        
@@ -111,6 +125,12 @@ contract QDAOTimelock is QDAOTimelockInterface {
         require(msg.sender == pendingAdmin, "QDAOTimelock::acceptAdmin: Call must come from pending admin.");
         admin = msg.sender;
         pendingAdmin = address(0);
+    }
+
+    /// @notice Sets delegator contract's address
+    function setDelegator(address _delegator) public onlyAdmin() {
+        require(delegator == address(0), "QDAOTimelock::setDelegator: Delegator already set");
+        delegator = _delegator;
     }
 
     fallback() external payable { }

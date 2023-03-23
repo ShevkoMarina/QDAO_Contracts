@@ -20,6 +20,9 @@ contract GovernorEvents {
 
     /// @notice An event emitted when a vote has been cast on a proposal 
     event VoteCasted(address indexed voter, uint proposalId, bool support, uint votes);
+
+    /// @notice An event emitted when a principal approve a proposal
+    event ProposalApproved(address indexed approver, uint proposalId);
 }
 
 contract QDAOGovernorDelegatorStorage {
@@ -94,9 +97,6 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
         /// @notice Flag marking whether the proposal has been executed
         bool executed;
 
-        /// @notice Flag marking whether the proposal has been queued
-        bool queued;
-
         /// @notice Receipts of ballots for the entire set of voters
         mapping (address => Receipt) receipts;
 
@@ -147,6 +147,7 @@ interface QDAOTimelockInterface {
 
     function delay() external view returns (uint);
     function GRACE_PERIOD() external view returns (uint);
+    function contractAddress() external view returns (address);
     function acceptAdmin() external;
     function queuedTransactions(bytes32 hash) external view returns (bool);
     function queueTransaction(address target, uint value, bytes calldata data, uint eta) external returns (bytes32);

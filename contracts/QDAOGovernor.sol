@@ -4,6 +4,7 @@ pragma experimental ABIEncoderV2;
 
 import "./QDAOInterfaces.sol";
 import "./SafeMath.sol";
+import "hardhat/console.sol";
 
 
 contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
@@ -14,17 +15,14 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         return address(this);
     }
 
-    modifier onlyGovernor() {
-        require(this._governor() == msg.sender, "QDAOGovernor: caller is not the governor");
-        _;
-    }
-
     modifier onlyAdmin() {
         require(admin == msg.sender, "QDAOGovernor: caller is not the admin");
         _;
     }
 
-    function updateVotingPeriod(uint _newValue) public onlyGovernor {
+    function updateVotingPeriod(uint _newValue) public {
+        
+        require(timelock.contractAddress() == msg.sender, "DAOGovernor: caller is not the timelock");
         votingPeriod = _newValue;
     }
 
@@ -32,7 +30,9 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         address _timelock,
         address _token,
         uint _votingPeriod,
-        uint _quorumNumerator) 
+        uint _quorumNumerator,
+        address[] memory _signers,
+        uint8 _requiredApprovals) 
         public onlyAdmin {
         
         require(address(timelock) == address(0), "QDAOGovernor::initialize: can be only be initialized once");
@@ -43,12 +43,14 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         token = QDAOTokenV0Interface(_token);
         votingPeriod = _votingPeriod;
         quorumNumerator = _quorumNumerator;
+
+        createMultisig(_signers, _requiredApprovals);
     }
 
     function createMultisig(
         address[] memory signers,
-        uint8 requiredApprovals) onlyAdmin 
-        public {
+        uint8 requiredApprovals)  
+        internal {
 
         MultiSig storage newMultisig = multisig;
         newMultisig.signers = signers;
@@ -61,6 +63,8 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         require(containsValue(multisig.signers, msg.sender), "QDAOGovernor::approve: signer is not from list of principals");
         require(proposal.hasApproved[msg.sender] == false, "QDAOGovernor::approve: signer has already approved");
         proposal.hasApproved[msg.sender] = true;
+
+        emit ProposalApproved(msg.sender, proposalId);
     }
 
     function containsValue(address[] memory array, address value) public pure returns (bool) {
@@ -80,6 +84,7 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         public returns (uint) {
 
         require(address(timelock) != address(0), "QDAOGovernor::createProposal: Governor is not initialized");
+        require(multisig.requiredApprovals > 0, "QDAOGovernor::createProposal: Mutisig for principals not created");
 
         uint startBlock = block.number;
         uint endBlock = startBlock.add(votingPeriod);
@@ -106,7 +111,7 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
 
     function queueProposal(uint proposalId) external {
 
-        require(getState(proposalId) == ProposalState.Succeeded, "QDAOGovernor::queue: proposal must have Succeded state");
+        require(getProposalState(proposalId) == ProposalState.Succeeded, "QDAOGovernor::queue: proposal must have Succeded state");
 
         Proposal storage proposal = proposals[proposalId];
         uint eta = block.timestamp.add(timelock.delay());
@@ -116,30 +121,6 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         }
 
         proposal.eta = eta;
-        proposal.queued = true;
-
-        emit ProposalQueued(proposalId, eta);
-    }
-
-    function queueProposalWithNoQuorum(uint proposalId) internal onlyAdmin {
-        require(multisig.signers.length > 0, "QDAOGovernor::queueForCrisisManagement: list of principals is empty");
-        require(getState(proposalId) == ProposalState.NoQuorum, "QDAOGovernor::queueForCrisisManagement: proposal must have NoQuorum state");
-
-        Proposal storage proposal = proposals[proposalId];
-
-        uint8 approvals = calculateApprovals(proposal);
-    
-        require(approvals >= multisig.requiredApprovals, "QDAOGovernor::queueForCrisisManagement: not enough approvals from principals");
-
-        uint eta = block.timestamp.add(timelock.delay());
-
-        for (uint i = 0; i < proposal.targets.length; i++) {
-            queueOrRevertInternal(proposal.targets[i], proposal.values[i], proposal.calldatas[i], eta);
-        }
-
-        proposal.eta = eta;
-        proposal.queued = true;
-
         emit ProposalQueued(proposalId, eta);
     }
 
@@ -163,7 +144,7 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
     }
 
     function executeProposal(uint proposalId) external payable {
-        require(getState(proposalId) == ProposalState.Queued, "QDAOGovernor::execute: proposal can only be executed if it is queued");
+        require(getProposalState(proposalId) == ProposalState.Queued, "QDAOGovernor::execute: proposal can only be executed if it is queued");
         Proposal storage proposal = proposals[proposalId];
         proposal.executed = true;
 
@@ -176,7 +157,7 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
 
 
     function cancelProposal(uint proposalId) external {
-        require(getState(proposalId) != ProposalState.Executed, "QDAOGovernor::cancel: cannot cancel executed proposal");
+        require(getProposalState(proposalId) != ProposalState.Executed, "QDAOGovernor::cancel: cannot cancel executed proposal");
 
         Proposal storage proposal = proposals[proposalId];
 
@@ -191,9 +172,9 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
     }
 
 
-     function getState(uint proposalId) public view returns (ProposalState state) {
+     function getProposalState(uint proposalId) public view returns (ProposalState state) {
 
-        require(proposalCount >= proposalId && proposalId > 0, "QDAOGovernor::getState: invalid proposal id");
+        require(proposalCount >= proposalId && proposalId > 0, "QDAOGovernor::getProposalState: invalid proposal id");
 
         Proposal storage proposal = proposals[proposalId];
 
@@ -203,10 +184,11 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         else if (block.number <= proposal.endBlock) {
             return ProposalState.Active;
         } 
-        else if (proposal.forVotes <= proposal.againstVotes && proposal.forVotes >= getQuorum()) {
+        else if (proposal.forVotes <= proposal.againstVotes) {
             return ProposalState.Defeated;
         } 
-        else if (proposal.eta == 0 || calculateApprovals(proposal) > multisig.requiredApprovals) {
+        else if ((proposal.eta == 0 && proposal.forVotes >= getQuorum()) ||
+                 (proposal.eta == 0 && calculateApprovals(proposal) >= multisig.requiredApprovals && proposal.forVotes < getQuorum())) {
             return ProposalState.Succeeded;
         } 
         else if (proposal.forVotes < getQuorum()) {
@@ -221,22 +203,23 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         else {
             return ProposalState.Queued;
         }
+        
     }
 
     function vote(
         uint proposalId,
         bool support) 
-        internal returns (uint256) {
+        public returns (uint) {
 
         address voter = msg.sender;
 
         Proposal storage proposal = proposals[proposalId];
-        require(getState(proposalId) == ProposalState.Active, "QDAOGovernor::vote: proposal state must be active");
+        require(getProposalState(proposalId) == ProposalState.Active, "QDAOGovernor::vote: proposal state must be active");
 
         Receipt storage receipts = proposal.receipts[voter];
         require(receipts.hasVoted == false, 'QDAOGovernor::vote: voter already voted');
 
-        uint256 weight = getVotes(voter);
+        uint weight = getVotes(voter);
         require(weight > 0, "QDAOGovernor::vote: voter has no QDAO tokens");
 
         if (support) {
@@ -252,14 +235,12 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         return weight;
     }
 
-    
 
-
-    function getVotes(address account) internal view returns (uint256) {
+    function getVotes(address account) internal view returns (uint) {
         return token.getCurrentVotes(account);
     }
 
-    function getQuorum() public view returns (uint256) {
+    function getQuorum() public view returns (uint) {
         return (token.totalSupply() * quorumNumerator) / 100;
     }
 

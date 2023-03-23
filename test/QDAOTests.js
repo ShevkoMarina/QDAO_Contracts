@@ -3,222 +3,210 @@ const { ethers, network } = require("hardhat");
 const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
 const { TASK_COMPILE_REMOVE_OBSOLETE_ARTIFACTS } = require("hardhat/builtin-tasks/task-names");
 
+async function deployFixture() {
+
+    const [admin, proposer, voter1, voter2, voter3, signer1, signer2, signer3] = await ethers.getSigners();
+
+    const QDAOToken = await ethers.getContractFactory("QDAOTokenV0");
+    const token = await QDAOToken.connect(admin).deploy(admin.address);
+  //  console.log("QDAOToken deployed to address:", token.address);
+
+    const QDAOTimelock = await ethers.getContractFactory("QDAOTimelock");
+    const timelock = await QDAOTimelock.connect(admin).deploy(admin.address, 2*24*60*60);
+   // console.log("QDAOTimelock deployed to address:", timelock.address);
+
+    const QDAOGovernor = await ethers.getContractFactory("QDAOGovernor");
+    const governor = await QDAOGovernor.connect(admin).deploy();
+  //  console.log("QDAOGovernor deployed to address:", governor.address);
+
+    const QDAOGovernorDelegator = await ethers.getContractFactory("QDAOGovernorDelegator");
+    const delegator = await QDAOGovernorDelegator.connect(admin)
+    .deploy(timelock.address, token.address, admin.address, governor.address, 6, 5, [signer1.address, signer2.address, signer3.address], 2);
+  //  console.log("QDAOGovernorDelegator deployed to address:", delegator.address);
+
+    return {token, delegator, governor, timelock, admin}
+}
+
+async function mineNBlocks(n) {
+    for (let index = 0; index < n; index++) {
+      await ethers.provider.send('evm_mine');
+    }
+  }
+
+async function send(sender, to_address, contract, method, params) {
+
+    var result = sender.sendTransaction(
+        {
+          to: to_address,
+          data: contract.interface.encodeFunctionData(method, params)
+        });
+    
+    return result;
+}
+
 describe("Initial tests", function () {
     
-    async function deployFixture() {
-
-        const [owner, proposer, voter1, voter2, voter3] = await ethers.getSigners();
-    
-        const QDAOToken = await ethers.getContractFactory("QDAOToken");
-        const token = await QDAOToken.deploy(owner.address);
-        console.log("QDAOToken deployed to address:", token.address);
-
-        const QDAOTimelock = await ethers.getContractFactory("QDAOTimelock");
-        const timelock = await QDAOTimelock.deploy(owner.address, 2*24*60*60);
-        console.log("QDAOTimelock deployed to address:", timelock.address);
-
-        const QDAOGovernor = await ethers.getContractFactory("QDAOGovernor");
-        const governor = await QDAOGovernor.deploy();
-        console.log("QDAOGovernor deployed to address:", governor.address);
-
-        const QDAOGovernorDelegator = await ethers.getContractFactory("QDAOGovernorDelegator");
-        const delegator = await QDAOGovernorDelegator.deploy(timelock.address, token.address, owner.address, governor.address, 5);
-        console.log("QDAOGovernorDelegator deployed to address:", delegator.address);
-
-        return {token, delegator, governor, timelock, owner, proposer, voter1, voter2, voter3}
-    }
-
-    async function mineBlocksFixture() {
-        await ethers.provider.send("evm_mine");
-        await ethers.provider.send("evm_mine");
-        await ethers.provider.send("evm_mine");
-        await ethers.provider.send("evm_mine");
-        await ethers.provider.send("evm_mine");
-    }
-
     it("Deploy contracts", async function () {
 
-        await loadFixture(deployFixture);
+        const {token, delegator, governor, timelock, admin} = await deployFixture();
+
+        console.log("Admin address: ", await delegator.admin())
+        expect(await delegator.admin()).to.equal(admin.address)
+        expect(await delegator.implementation()).to.equal(governor.address);
     })
-})
+
+    it("Governor initialize only once", async function () {
+
+        var {token, delegator, governor, timelock, admin} = await deployFixture();
+        var [admin, proposer, voter1, voter2, voter3, signer1, signer2, signer3] = await ethers.getSigners();
+
+        var result = send(admin , delegator.address, governor, "initialize", 
+        [timelock.address, token.address, 5, 6, [signer1.address, signer2.address, signer3.address], 2]);
+        
+        await expect(result).to.be.revertedWith('QDAOGovernor::initialize: can be only be initialized once');
+
+    })
+    
+    it("Create proposal with valid params", async function ()  {
+
+        var {token, delegator, governor, timelock, admin} = await deployFixture();
+        var [admin, proposer] = await ethers.getSigners();
+
+        var targets = [governor.address]
+        var values = [0]
+        var calldata = governor.interface.encodeFunctionData('updateVotingPeriod', [7])
+        var calldatas = [calldata]
+
+        var currentBlock = await ethers.provider.getBlockNumber();
+
+        var result = send(proposer , delegator.address, governor, "createProposal", [targets, values, calldatas]);
+
+        await expect(result).to.emit(delegator, "ProposalCreated")
+        .withArgs(1, proposer.address, targets, values, calldatas,
+            currentBlock + 1, // понять как исправить эту фигню с блоками
+            currentBlock + 7)
+    })
 
 
-describe("Token tests", function () {
+    it("Distribute tokens between voters", async function ()  {
 
-    async function deployFixture() {
-        const [owner, voter1, voter2, voter3] = await ethers.getSigners();
-
-        const QDAOToken = await ethers.getContractFactory("QDAOTokenV0");
-        const token = await QDAOToken.deploy(owner.address);
-        console.log("QDAOTokenV0 deployed to address:", token.address);
-
-
-        return {token, owner, voter1, voter2, voter3};
-    }
-
-    it("Get total supply", async function () {
-
-        const {token, owner, voter1, voter2, voter3} =
-        await loadFixture(deployFixture);
-
-        expect(await token.totalSupply()).to.equal(10000);
-    });
-
-    it("Distibute tokens", async function () {
-
-        // Почему то возвращает 0 с чекпоинтами
-        const {token, owner, voter1, voter2, voter3} =
-        await loadFixture(deployFixture);
-
-        await token.connect(owner).transfer(voter1.address, 20);
-        await token.connect(owner).transfer(voter2.address, 31);
+        var {token, delegator, governor, timelock, admin} = await deployFixture();
+        var [admin, proposer, voter1, voter2, voter3] = await ethers.getSigners();
+        
+        await token.connect(admin).transfer(voter1.address, 20);
+        await token.connect(admin).transfer(voter2.address, 31);
 
         expect(await token.getCurrentVotes(voter1.address)).to.equal(20);
         expect(await token.getCurrentVotes(voter2.address)).to.equal(31);
-        expect(await token.getCurrentVotes(owner.address)).to.equal((await token.totalSupply())-51);
-    });
-})
+        expect(await token.getCurrentVotes(admin.address)).to.equal((await token.totalSupply())-51);
+    })
 
-describe("Governor:Proposal tests", function () {
+    it ("Delagator: Vote for proposal succeed state", async function () {
 
-    async function deployFixture() {
-        // Надо еще либу задеплоить
-        const [owner, proposer, voter1, voter2, voter3] = await ethers.getSigners();
+        var {token, delegator, governor, timelock, admin} = await deployFixture();
+        var [admin, proposer, voter1, voter2, voter3] = await ethers.getSigners();
 
-        const QDAOToken = await ethers.getContractFactory("QDAOToken");
-        const token = await QDAOToken.deploy(owner.address);
-        console.log("QDAOToken deployed to address:", token.address);
+        var targets = [governor.address]
+        var values = [0]
+        var calldata = governor.interface.encodeFunctionData('updateVotingPeriod', [7])
+        var calldatas = [calldata]
 
-        const QDAOTimelock = await ethers.getContractFactory("QDAOTimelock");
-        const timelock = await QDAOTimelock.deploy(owner.address, 2*24*60*60);
-        console.log("QDAOTimelock deployed to address:", timelock.address);
+        var startBlock = await ethers.provider.getBlockNumber();
+        await send(proposer , delegator.address, governor, "createProposal", [targets, values, calldatas])
 
-        const QDAOGovernor = await ethers.getContractFactory("QDAOGovernor");
-        const governor = await QDAOGovernor.deploy();
-        console.log("QDAOGovernor deployed to address:", governor.address);
+        await token.connect(admin).transfer(voter1.address, 200);
+        await token.connect(admin).transfer(voter2.address, 310);
 
-        const QDAOGovernorDelegator = await ethers.getContractFactory("QDAOGovernorDelegator");
-        const delegator = await QDAOGovernorDelegator.deploy(timelock.address, token.address, owner.address, governor.address, 5);
-        console.log("QDAOGovernorDelegator deployed to address:", delegator.address);
+        await send(voter1, delegator.address, governor, 'vote', [1, true])
+        await send(voter2, delegator.address, governor, 'vote', [1, true])
 
-        return {token, delegator, governor, timelock, owner, proposer, voter1, voter2, voter3}
-    }
+        await mineNBlocks(6);
+        await expect(startBlock + 6, await ethers.provider.getBlockNumber())
 
-    it("Init governor", async function () {
+        await timelock.connect(admin).setDelegator(delegator.address);
 
-        const {token, delegator, governor, timelock, owner, proposer, voter1, voter2, voter3} =
-        await loadFixture(deployFixture);
+        var result = send(admin, delegator.address, governor, 'queueProposal', [1])
+        await expect(result).to.emit(timelock, "QueueTransaction")
+        await expect(result).to.emit(delegator, 'ProposalQueued');
+    })
 
-        expect(await governor.votingPeriod()).to.equal(0);
+    it ("Delagator: Vote for proposal to no quorum state with signers approve", async function () {
 
-        await governor.connect(owner).initialize(
-            timelock.address,
-            token.address,
-            5);
+        var {token, delegator, governor, timelock, admin} = await deployFixture();
+        await timelock.connect(admin).setDelegator(delegator.address);
+        var [admin, proposer, voter1, voter2, voter3, signer1, signer2, signer3] = await ethers.getSigners();
 
-        expect(await governor.votingPeriod()).to.equal(5);
-    });
+        var targets = [governor.address]
+        var values = [0]
+        var calldata = governor.interface.encodeFunctionData('updateVotingPeriod', [7])
+        var calldatas = [calldata]
 
-    it("Create proposal with valid params", async function () {
-        const {token, delegator, governor, timelock, owner, proposer, voter1, voter2, voter3} =
-        await loadFixture(deployFixture);
+        var startBlock = await ethers.provider.getBlockNumber();
+        await send(proposer , delegator.address, governor, "createProposal", [targets, values, calldatas])
 
-        await governor.connect(owner).initialize(
-            timelock.address,
-            token.address,
-            5);
+        await token.connect(admin).transfer(voter1.address, 1);
+        await token.connect(admin).transfer(voter2.address, 1);
 
-        // Распределяем токены
-        await token.connect(owner).transfer(voter1.address, 20);
-        await token.connect(owner).transfer(voter2.address, 31);
-        await token.connect(owner).transfer(voter3.address, 8);
-        await token.connect(owner).transfer(proposer.address, 1);
+        await send(voter1, delegator.address, governor, 'vote', [1, true])
+        await send(voter2, delegator.address, governor, 'vote', [1, true])
 
-        // Создаем предложение
-        const proposalCallData = governor.interface.encodeFunctionData("updateVotingPeriod", [2]);
-        const targets = [governor.address];
-        const values = [0];
-        const proposalDesc = "Change voting period to 2";
+        await mineNBlocks(6);
+        expect(startBlock + 6, await ethers.provider.getBlockNumber())
 
-        createdProposal = await governor.connect(proposer).createProposal(targets, values, [proposalCallData], proposalDesc);
-        var createdProposalId =  await governor.proposalCount();
+        var result = send(admin, delegator.address, governor, 'queueProposal', [1])
+        await expect(result).to.be.revertedWith('QDAOGovernor::queue: proposal must have Succeded state');
 
-        expect(createdProposalId).to.equal(1);
-        var proposal = await governor.proposals(createdProposalId);
-        expect(proposal.id).to.equal(1);
-       // expect(proposal.description).to.equal(proposalDesc);
+        var result = send(admin, delegator.address, governor, 'queueProposal', [1])
+        await expect(result).to.be.revertedWith('QDAOGovernor::queue: proposal must have Succeded state');
 
-        expect(await governor.getState(createdProposalId)).to.equal(ProposalState.Active);
-        console.log(proposal)
+        var result = send(signer1, delegator.address, governor, 'approve', [1]); 
+        await expect(result).to.emit(delegator, 'ProposalApproved').withArgs(signer1.address, 1)
+
+        var result = send(admin, delegator.address, governor, 'queueProposal', [1])
+        await expect(result).to.be.revertedWith('QDAOGovernor::queue: proposal must have Succeded state');
+    
+        var result = await send(signer2, delegator.address, governor, 'approve', [1]); 
+        await expect(result).to.emit(delegator, 'ProposalApproved').withArgs(signer2.address, 1)
+
+        var result = await send(admin, delegator.address, governor, 'queueProposal', [1])
+        await expect(result).to.emit(delegator, 'ProposalQueued');
+    })
+
+    it ("Delagator: Execute queued proposal", async function () {
+
+        var {token, delegator, governor, timelock, admin} = await deployFixture();
+        await timelock.connect(admin).setDelegator(delegator.address);
+        var [admin, proposer, voter1, voter2, voter3, signer1, signer2, signer3] = await ethers.getSigners();
+
+        var targets = [delegator.address]
+        var values = [0]
+        var calldata = governor.interface.encodeFunctionData('updateVotingPeriod', [7])
+        var calldatas = [calldata]
+
+        var startBlock = await ethers.provider.getBlockNumber();
+        await send(proposer , delegator.address, governor, "createProposal", [targets, values, calldatas])
+
+        await token.connect(admin).transfer(voter1.address, 300);
+        await token.connect(admin).transfer(voter2.address, 400);
+
+        await send(voter1, delegator.address, governor, 'vote', [1, true])
+        await send(voter2, delegator.address, governor, 'vote', [1, true])
+
+        await mineNBlocks(6);
+        expect(startBlock + 6, await ethers.provider.getBlockNumber())
+
+        var result = send(admin, delegator.address, governor, 'queueProposal', [1])
+        await expect(result).to.emit(delegator, 'ProposalQueued')
+
+        var result = send(admin, delegator.address, governor, 'executeProposal', [1])
+        await expect(result).to.be.revertedWith("QDAOTimelock::executeTransaction: Transaction hasn't surpassed time lock.");
         
-       // expect(createdProposal).to.emit(governor, "ProposalCreated")
-       //  .withArgs(1, proposer.address, targets, values, proposalCallData, await ethers.provider.getBlockNumber(), await ethers.provider.getBlockNumber() + await governor.getVotingPeriod(), proposalDesc)
-    });
+        await ethers.provider.send("evm_increaseTime", [2*24*60*60])
 
-    async function mineBlocksFixture() {
-        await ethers.provider.send("evm_mine");
-        await ethers.provider.send("evm_mine");
-        await ethers.provider.send("evm_mine");
-        await ethers.provider.send("evm_mine");
-        await ethers.provider.send("evm_mine");
-    }
+        console.log("bryre", await timelock.contractAddress())
 
-    it("Crisis management no quorum", async function () {
-        const {token, delegator, governor, timelock, owner, proposer, voter1, voter2, voter3} =
-        await loadFixture(deployFixture);
-
-        await governor.connect(owner).initialize(
-            timelock.address,
-            token.address,
-            5);
-
-         // Распределяем токены
-         await token.connect(owner).transfer(voter1.address, 1);
-         await token.connect(owner).transfer(voter2.address, 2);
-         await token.connect(owner).transfer(voter3.address, 3);
-
-         // Создаем предложение
-         const proposalCallData = governor.interface.encodeFunctionData("updateVotingPeriod", [2]);
-         const targets = [governor.address];
-         const values = [0];
-         const proposalDesc = "Change voting period to 2";
- 
-         createdProposal = await governor.connect(proposer).createProposal(targets, values, [proposalCallData], proposalDesc);
-         var createdProposalId =  await governor.proposalCount();
-         expect(createdProposalId).to.equal(1);
-
-         // Создаем принципалов
-         await governor.createMultisig([voter1.address, voter2.address], 2);
-
-         await loadFixture(mineBlocksFixture);
-
-         expect(await governor.getState(createdProposalId)).to.equal(ProposalState.NoQuorum);
-
-         await governor.connect(voter1).approve(1);
-         await governor.connect(voter2).approve(1);
-
-
-         var admin = await timelock.admin();
-         console.log(admin);
-         console.log(owner.address);
-
-         // Пытаемся поставить в очередь
-         await governor.connect(owner).queue(1);
-
-         expect(await governor.getState(1)).to.equal(ProposalState.Queued);
-
-    });
-});
-
-// Проверить что не разолбало статусы
-
-const ProposalState  = {
-    Active: 0,
-    Canceled: 1,
-    Defeated: 2,
-    NoQuorum: 3,
-    Succeeded: 4,
-    Queued: 5,
-    Expired: 6,
-    Executed: 7
-};
+        var result = send(admin, delegator.address, governor, 'executeProposal', [1])
+        await expect(result).to.emit(delegator, 'ProposalExecuted')
+        .withArgs(1);
+    })
+})

@@ -12,14 +12,20 @@ contract QDAOGovernorDelegator is QDAOGovernorDelegatorStorage, GovernorEvents {
 			address _token,
 			address _admin,
 	        address _implementation,
-	        uint _votingPeriod) public {
+	        uint _votingPeriod,
+            uint _quorumNumerator,
+            address[] memory _signers,
+            uint8 _requiredApprovals) public {
                 
         admin = msg.sender;
 
-        delegateTo(_implementation, abi.encodeWithSignature("initialize(address,address,uint256)",
+        delegateTo(_implementation, abi.encodeWithSignature("initialize(address,address,uint256,uint256,address[],uint8)",
                                                             _timelock,
                                                             _token,
-                                                            _votingPeriod));
+                                                            _votingPeriod,
+                                                            _quorumNumerator,
+                                                            _signers,
+                                                            _requiredApprovals));
 
         setImplementation(_implementation);
 

@@ -8,31 +8,17 @@ const hre = require("hardhat");
 
 async function main() {
 
-  var ownerAddress = "0x75c09fb19051f8F13B0C8BdD7e7c3BE123821C77";
-
-  /*
-  const QDAOToken = await ethers.getContractFactory("QDAOToken");
-  const token = await QDAOToken.deploy(ownerAddress);
-  console.log("QDAOToken deployed to address:", token.address);
-
-  const QDAOTimelock = await ethers.getContractFactory("QDAOTimelock");
-  const timelock = await QDAOTimelock.deploy(ownerAddress, 2*24*60*60);
-  console.log("QDAOTimelock deployed to address:", timelock.address);
+  var adminAddress = "0x75c09fb19051f8F13B0C8BdD7e7c3BE123821C77";
 
   const QDAOGovernor = await ethers.getContractFactory("QDAOGovernor");
   const governor = await QDAOGovernor.deploy();
   console.log("QDAOGovernor deployed to address:", governor.address);
-*/
+
+  var timelock = "0x9B3aeDe960AAdcb366841fB4bc99eC0E2E692c52";
+  var token = "0xF9c7C95a4BBE357120726ECE972Ffed59B6087A3";
   const QDAOGovernorDelegator = await ethers.getContractFactory("QDAOGovernorDelegator");
-  const delegator = await QDAOGovernorDelegator.deploy(
-    "0xB289545bBF4443b03CC44F8BaF65E86DAF9d90A9",
-    "0xc78EB1c2d7b19C087B5d00Ea9D980D4746e7Bc39",
-    ownerAddress,
-    "0x2980343ce6E94aA17c5499139AB3532D98095321", 
-    5);
-
-  console.log("QDAOGovernorDelegator deployed to address:", delegator.address);
-
+  const delegator = await QDAOGovernorDelegator.deploy(timelock, token, adminAddress, governor.address, 5, 5);
+  console.log("QDAODelegator deployed to address:", delegator.address);
 }
 
 // We recommend this pattern to be able to use async/await everywhere
