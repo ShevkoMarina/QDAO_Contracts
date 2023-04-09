@@ -2,7 +2,7 @@ const { expect } = require("chai");
 const { ethers, network } = require("hardhat");
 const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
 const { TASK_COMPILE_REMOVE_OBSOLETE_ARTIFACTS } = require("hardhat/builtin-tasks/task-names");
-// добавить делай перед голосованием
+
 async function deployFixture() {
 
     const [admin, proposer, voter1, voter2, voter3, signer1, signer2, signer3] = await ethers.getSigners();
@@ -12,7 +12,7 @@ async function deployFixture() {
   //  console.log("QDAOToken deployed to address:", token.address);
 
     const QDAOTimelock = await ethers.getContractFactory("QDAOTimelock");
-    const timelock = await QDAOTimelock.connect(admin).deploy(admin.address, 2*24*60*60);
+    const timelock = await QDAOTimelock.connect(admin).deploy(admin.address, 2*24*60*60); // 172800
    // console.log("QDAOTimelock deployed to address:", timelock.address);
 
     const QDAOGovernor = await ethers.getContractFactory("QDAOGovernor");
@@ -83,7 +83,7 @@ describe("Initial tests", function () {
 
         await expect(result).to.emit(delegator, "ProposalCreated")
         .withArgs(1, proposer.address, targets, values, calldatas,
-            currentBlock + 1, // понять как исправить эту фигню с блоками
+            currentBlock + 1, 
             currentBlock + 7)
     })
 
@@ -202,7 +202,7 @@ describe("Initial tests", function () {
         await timelock.connect(admin).setDelegator(delegator.address);
         var [admin, proposer, voter1, voter2, voter3, signer1, signer2, signer3] = await ethers.getSigners();
 
-        var targets = [governor.address] // не должен ли тут быть адрес делегатора
+        var targets = [governor.address]
         var values = [0]
         var calldata = governor.interface.encodeFunctionData('updateVotingPeriod', [7])
         var calldatas = [calldata]
