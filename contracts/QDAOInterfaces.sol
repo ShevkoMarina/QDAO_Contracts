@@ -52,7 +52,7 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
     QDAOTimelockInterface public timelock;
 
     /// @notice The address of the QDAO token
-    QDAOTokenV0Interface public token;
+    QDAOTokenInterface public token;
 
     /// @notice Multisig with addresses of principals who approve proposals in crisis sutuation
     MultiSig public multisig;

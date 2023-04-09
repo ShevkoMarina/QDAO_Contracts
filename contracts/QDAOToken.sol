@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/draft-ERC20Permit.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Votes.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
+import "hardhat/console.sol";
 
 contract QDAOToken {
     
@@ -18,7 +15,7 @@ contract QDAOToken {
     uint8 public constant decimals = 18;
 
     /// @notice Total number of tokens in circulation
-    uint public totalSupply = 10000; // 10 million Comp
+    uint public totalSupply = 10000; 
 
     /// @notice Allowance amounts on behalf of others
     mapping (address => mapping (address => uint96)) internal allowances;
@@ -41,15 +38,6 @@ contract QDAOToken {
     /// @notice The number of checkpoints for each account
     mapping (address => uint32) public numCheckpoints;
 
-    /// @notice The EIP-712 typehash for the contract's domain
-    bytes32 public constant DOMAIN_TYPEHASH = keccak256("EIP712Domain(string name,uint256 chainId,address verifyingContract)");
-
-    /// @notice The EIP-712 typehash for the delegation struct used by the contract
-    bytes32 public constant DELEGATION_TYPEHASH = keccak256("Delegation(address delegatee,uint256 nonce,uint256 expiry)");
-
-    /// @notice A record of states for signing / validating signatures
-    mapping (address => uint) public nonces;
-
     /// @notice An event thats emitted when an account changes its delegate
     event DelegateChanged(address indexed delegator, address indexed fromDelegate, address indexed toDelegate);
 
@@ -66,38 +54,25 @@ contract QDAOToken {
      * @notice Construct a new Comp token
      * @param account The initial account to grant all the tokens
      */
-    constructor(address account) public {
+    constructor(address account, uint96 _totalSupply) public {
+
+        totalSupply = _totalSupply;
         balances[account] = uint96(totalSupply);
         emit Transfer(address(0), account, totalSupply);
     }
 
-
-    // ERC20
-
-    /**
-     * @notice Get the number of tokens `spender` is approved to spend on behalf of `account`
-     * @param account The address of the account holding the funds
-     * @param spender The address of the account spending the funds
-     * @return The number of tokens approved
-     */
+    /// @notice Get the number of tokens `spender` is approved to spend on behalf of `account`
     function allowance(address account, address spender) external view returns (uint) {
         return allowances[account][spender];
     }
 
-    /**
-     * @notice Approve `spender` to transfer up to `amount` from `src`
-     * @dev This will overwrite the approval amount for `spender`
-     *  and is subject to issues noted [here](https://eips.ethereum.org/EIPS/eip-20#approve)
-     * @param spender The address of the account which may transfer tokens
-     * @param rawAmount The number of tokens that are approved (2^256-1 means infinite)
-     * @return Whether or not the approval succeeded
-     */
+    /// @notice Approve `spender` to transfer up to `amount` from `src`
     function approve(address spender, uint rawAmount) external returns (bool) {
         uint96 amount;
         if (rawAmount == type(uint).max) {
             amount = type(uint96).max;
         } else {
-            amount = safe96(rawAmount, "Comp::approve: amount exceeds 96 bits");
+            amount = safe96(rawAmount, "QDAOToken::approve: amount exceeds 96 bits");
         }
 
         allowances[msg.sender][spender] = amount;
@@ -106,23 +81,14 @@ contract QDAOToken {
         return true;
     }
 
-    /**
-     * @notice Get the number of tokens held by the `account`
-     * @param account The address of the account to get the balance of
-     * @return The number of tokens held
-     */
+    /// @notice Get the number of tokens held by the `account`
     function balanceOf(address account) external view returns (uint) {
         return balances[account];
     }
 
-    /**
-     * @notice Transfer `amount` tokens from `msg.sender` to `dst`
-     * @param dst The address of the destination account
-     * @param rawAmount The number of tokens to transfer
-     * @return Whether or not the transfer succeeded
-     */
+    /// @notice Transfer `amount` tokens from `msg.sender` to `dst`
     function transfer(address dst, uint rawAmount) external returns (bool) {
-        uint96 amount = safe96(rawAmount, "Comp::transfer: amount exceeds 96 bits");
+        uint96 amount = safe96(rawAmount, "QDAOToken::transfer: amount exceeds 96 bits");
         _transferTokens(msg.sender, dst, amount);
         return true;
     }
@@ -137,10 +103,10 @@ contract QDAOToken {
     function transferFrom(address src, address dst, uint rawAmount) external returns (bool) {
         address spender = msg.sender;
         uint96 spenderAllowance = allowances[src][spender];
-        uint96 amount = safe96(rawAmount, "Comp::approve: amount exceeds 96 bits");
+        uint96 amount = safe96(rawAmount, "QDAOToken::approve: amount exceeds 96 bits");
 
         if (spender != src && spenderAllowance != type(uint96).max) {
-            uint96 newAllowance = sub96(spenderAllowance, amount, "Comp::transferFrom: transfer amount exceeds spender allowance");
+            uint96 newAllowance = sub96(spenderAllowance, amount, "QDAOToken::transferFrom: transfer amount exceeds spender allowance");
             allowances[src][spender] = newAllowance;
 
             emit Approval(src, spender, newAllowance);
@@ -150,10 +116,7 @@ contract QDAOToken {
         return true;
     }
 
-    /**
-     * @notice Delegate votes from `msg.sender` to `delegatee`
-     * @param delegatee The address to delegate votes to
-     */
+    /// @notice Delegate votes from `msg.sender` to `delegatee`
     function delegate(address delegatee) public {
 
         address currentDelegate = delegates[msg.sender];
@@ -165,26 +128,15 @@ contract QDAOToken {
         _moveDelegates(currentDelegate, delegatee, delegatorBalance);
     }
 
-
-    /**
-     * @notice Gets the current votes balance for `account`
-     * @param account The address to get votes balance
-     * @return The number of current votes for `account`
-     */
+    /// @notice Gets the current votes balance for `account`
     function getCurrentVotes(address account) external view returns (uint96) {
         uint32 nCheckpoints = numCheckpoints[account];
         return nCheckpoints > 0 ? checkpoints[account][nCheckpoints - 1].votes : 0;
     }
 
-    /**
-     * @notice Determine the prior number of votes for an account as of a block number
-     * @dev Block number must be a finalized block or else this function will revert to prevent misinformation.
-     * @param account The address of the account to check
-     * @param blockNumber The block number to get the vote balance at
-     * @return The number of votes the account had as of the given block
-     */
-    function getPriorVotes(address account, uint blockNumber) public view returns (uint96) {
-        require(blockNumber < block.number, "Comp::getPriorVotes: not yet determined");
+    /// @notice Determine the prior number of votes for an account as of a block number
+    function getPastVotes(address account, uint blockNumber) public view returns (uint96) {
+        require(blockNumber < block.number, "QDAOToken::getPriorVotes: not yet determined");
 
         uint32 nCheckpoints = numCheckpoints[account];
         if (nCheckpoints == 0) {
@@ -218,14 +170,13 @@ contract QDAOToken {
     }
 
     function _transferTokens(address src, address dst, uint96 amount) internal {
-        require(src != address(0), "Comp::_transferTokens: cannot transfer from the zero address");
-        require(dst != address(0), "Comp::_transferTokens: cannot transfer to the zero address");
+        require(src != address(0), "QDAOToken::_transferTokens: cannot transfer from the zero address");
+        require(dst != address(0), "QDAOToken::_transferTokens: cannot transfer to the zero address");
 
-        balances[src] = sub96(balances[src], amount, "Comp::_transferTokens: transfer amount exceeds balance");
-        balances[dst] = add96(balances[dst], amount, "Comp::_transferTokens: transfer amount overflows");
+        balances[src] = sub96(balances[src], amount, "QDAOToken::_transferTokens: transfer amount exceeds balance");
+        balances[dst] = add96(balances[dst], amount, "QDAOToken::_transferTokens: transfer amount overflows");
         emit Transfer(src, dst, amount);
         
-
         _moveDelegates(delegates[src], delegates[dst], amount);
     }
 
@@ -234,21 +185,21 @@ contract QDAOToken {
             if (srcRep != address(0)) {
                 uint32 srcRepNum = numCheckpoints[srcRep];
                 uint96 srcRepOld = srcRepNum > 0 ? checkpoints[srcRep][srcRepNum - 1].votes : 0;
-                uint96 srcRepNew = sub96(srcRepOld, amount, "Comp::_moveVotes: vote amount underflows");
+                uint96 srcRepNew = sub96(srcRepOld, amount, "QDAOToken::_moveVotes: vote amount underflows");
                 _writeCheckpoint(srcRep, srcRepNum, srcRepOld, srcRepNew);
             }
 
             if (dstRep != address(0)) {
                 uint32 dstRepNum = numCheckpoints[dstRep];
                 uint96 dstRepOld = dstRepNum > 0 ? checkpoints[dstRep][dstRepNum - 1].votes : 0;
-                uint96 dstRepNew = add96(dstRepOld, amount, "Comp::_moveVotes: vote amount overflows");
+                uint96 dstRepNew = add96(dstRepOld, amount, "QDAOToken::_moveVotes: vote amount overflows");
                 _writeCheckpoint(dstRep, dstRepNum, dstRepOld, dstRepNew);
             }
         }
     }
 
     function _writeCheckpoint(address delegatee, uint32 nCheckpoints, uint96 oldVotes, uint96 newVotes) internal {
-      uint32 blockNumber = safe32(block.number, "Comp::_writeCheckpoint: block number exceeds 32 bits");
+      uint32 blockNumber = safe32(block.number, "QDAOToken::_writeCheckpoint: block number exceeds 32 bits");
 
       if (nCheckpoints > 0 && checkpoints[delegatee][nCheckpoints - 1].fromBlock == blockNumber) {
           checkpoints[delegatee][nCheckpoints - 1].votes = newVotes;
@@ -258,16 +209,6 @@ contract QDAOToken {
       }
 
       emit DelegateVotesChanged(delegatee, oldVotes, newVotes);
-    }
-
-    function mint(address account, uint96 amount) public {
-        require(account != address(0), "ERC20: mint to the zero address");
-
-        totalSupply += amount;
-
-        balances[account] = add96(balances[account], amount, "Comp::_transferTokens: transfer amount exceeds balance");
-       
-        emit Transfer(address(0), account, amount);
     }
 
     function safe32(uint n, string memory errorMessage) internal pure returns (uint32) {

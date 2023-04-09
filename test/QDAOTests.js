@@ -2,13 +2,13 @@ const { expect } = require("chai");
 const { ethers, network } = require("hardhat");
 const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
 const { TASK_COMPILE_REMOVE_OBSOLETE_ARTIFACTS } = require("hardhat/builtin-tasks/task-names");
-
+// добавить делай перед голосованием
 async function deployFixture() {
 
     const [admin, proposer, voter1, voter2, voter3, signer1, signer2, signer3] = await ethers.getSigners();
 
-    const QDAOToken = await ethers.getContractFactory("QDAOTokenV0");
-    const token = await QDAOToken.connect(admin).deploy(admin.address);
+    const QDAOToken = await ethers.getContractFactory("QDAOToken");
+    const token = await QDAOToken.connect(admin).deploy(admin.address, 10000);
   //  console.log("QDAOToken deployed to address:", token.address);
 
     const QDAOTimelock = await ethers.getContractFactory("QDAOTimelock");
@@ -96,15 +96,84 @@ describe("Initial tests", function () {
         await token.connect(admin).transfer(voter1.address, 20);
         await token.connect(admin).transfer(voter2.address, 31);
 
-        expect(await token.getCurrentVotes(voter1.address)).to.equal(20);
-        expect(await token.getCurrentVotes(voter2.address)).to.equal(31);
-        expect(await token.getCurrentVotes(admin.address)).to.equal((await token.totalSupply())-51);
+        expect(await token.balanceOf(voter1.address)).to.equal(20);
+        expect(await token.balanceOf(voter2.address)).to.equal(31);
+        expect(await token.balanceOf(admin.address)).to.equal((await token.totalSupply())-51);
     })
 
+    it("Token: numcheckpoints returns the number of a delegate", async function ()  {
+
+      var {token, delegator, governor, timelock, admin} = await deployFixture();
+      var [admin, proposer, voter1, voter2, voter3] = await ethers.getSigners();
+      
+      var result = await token.connect(admin).transfer(voter1.address, 100);
+
+      // voter1 delegates his votes to voter2
+      const t1 = await token.connect(voter1).delegate(voter2.address);
+      expect(await token.numCheckpoints(voter2.address)).to.equal(1)
+
+      // voter 2 now have 20 votes
+      expect(await token.getCurrentVotes(voter2.address)).to.equal(100)
+      expect(await token.balanceOf(voter2.address)).to.equal(0)
+
+      // voter 1 have no votes
+      expect(await token.getCurrentVotes(voter1.address)).to.equal(0)
+      expect(await token.balanceOf(voter1.address)).to.equal(100)
+
+      // voter 1 transfer 10 tokens to voter 3
+      const t2 = await token.connect(voter1).transfer(voter3.address, 10);
+      expect(await token.numCheckpoints(voter2.address)).to.equal(2)
+      expect(await token.balanceOf(voter1.address)).to.equal(90)
+      expect(await token.getCurrentVotes(voter2.address)).to.equal(90)
+
+      // voter 1 transfer more 10 tokens to voter 3
+      const t3 = await token.connect(voter1).transfer(voter3.address, 10);
+      expect(await token.numCheckpoints(voter2.address)).to.equal(3)
+
+      // admin transfer 20 tokens to voter 1
+      const t4 = await token.connect(admin).transfer(voter1.address, 20);
+      expect(await token.numCheckpoints(voter2.address)).to.equal(4)
+
+      var result = await token.checkpoints(voter2.address, 0)
+      expect(result.fromBlock).to.equal(t1.blockNumber)
+      expect(result.votes).to.equal(100)
+
+      var result = await token.checkpoints(voter2.address, 1)
+      expect(result.fromBlock).to.equal(t2.blockNumber)
+      expect(result.votes).to.equal(90)
+
+      console.log(await token.getPastVotes(voter2.address, t2.blockNumber))
+    })
+
+
+    it("Token: distribute tokens", async function ()  {
+
+      var {token, delegator, governor, timelock, admin} = await deployFixture();
+      var [admin, proposer, voter1, voter2, voter3] = await ethers.getSigners();
+      
+      await token.connect(admin).transfer(voter1.address, 20);
+      await token.connect(admin).transfer(voter2.address, 30);
+      await token.connect(admin).transfer(voter3.address, 1);
+      
+
+      await token.connect(voter1).delegate(voter1.address);
+      expect(await token.getCurrentVotes(voter1.address)).to.equal(20)
+
+      await token.connect(voter2).delegate(voter3.address);
+      await token.connect(voter3).delegate(voter3.address);
+      expect(await token.getCurrentVotes(voter2.address)).to.equal(0)
+      expect(await token.getCurrentVotes(voter3.address)).to.equal(31)
+    })
+   
     it ("Delagator: Vote for proposal succeed state", async function () {
 
         var {token, delegator, governor, timelock, admin} = await deployFixture();
         var [admin, proposer, voter1, voter2, voter3] = await ethers.getSigners();
+
+        await token.connect(admin).transfer(voter1.address, 200);
+        await token.connect(voter1).delegate(voter1.address);
+        await token.connect(admin).transfer(voter2.address, 310);
+        await token.connect(voter2).delegate(voter2.address);
 
         var targets = [governor.address]
         var values = [0]
@@ -113,9 +182,6 @@ describe("Initial tests", function () {
 
         var startBlock = await ethers.provider.getBlockNumber();
         await send(proposer , delegator.address, governor, "createProposal", [targets, values, calldatas])
-
-        await token.connect(admin).transfer(voter1.address, 200);
-        await token.connect(admin).transfer(voter2.address, 310);
 
         await send(voter1, delegator.address, governor, 'vote', [1, true])
         await send(voter2, delegator.address, governor, 'vote', [1, true])
@@ -136,16 +202,19 @@ describe("Initial tests", function () {
         await timelock.connect(admin).setDelegator(delegator.address);
         var [admin, proposer, voter1, voter2, voter3, signer1, signer2, signer3] = await ethers.getSigners();
 
-        var targets = [governor.address]
+        var targets = [governor.address] // не должен ли тут быть адрес делегатора
         var values = [0]
         var calldata = governor.interface.encodeFunctionData('updateVotingPeriod', [7])
         var calldatas = [calldata]
 
         var startBlock = await ethers.provider.getBlockNumber();
-        await send(proposer , delegator.address, governor, "createProposal", [targets, values, calldatas])
 
         await token.connect(admin).transfer(voter1.address, 1);
+        await token.connect(voter1).delegate(voter1.address);
         await token.connect(admin).transfer(voter2.address, 1);
+        await token.connect(voter2).delegate(voter2.address);
+
+        await send(proposer , delegator.address, governor, "createProposal", [targets, values, calldatas])
 
         await send(voter1, delegator.address, governor, 'vote', [1, true])
         await send(voter2, delegator.address, governor, 'vote', [1, true])
@@ -183,12 +252,13 @@ describe("Initial tests", function () {
         var calldata = governor.interface.encodeFunctionData('updateVotingPeriod', [7])
         var calldatas = [calldata]
 
+        await token.connect(admin).transfer(voter1.address, 300);
+        await token.connect(voter1).delegate(voter1.address);
+        await token.connect(admin).transfer(voter2.address, 400);
+        await token.connect(voter2).delegate(voter2.address);
+
         var startBlock = await ethers.provider.getBlockNumber();
         await send(proposer , delegator.address, governor, "createProposal", [targets, values, calldatas])
-
-        await token.connect(admin).transfer(voter1.address, 300);
-        await token.connect(admin).transfer(voter2.address, 400);
-
         await send(voter1, delegator.address, governor, 'vote', [1, true])
         await send(voter2, delegator.address, governor, 'vote', [1, true])
 
@@ -202,8 +272,6 @@ describe("Initial tests", function () {
         await expect(result).to.be.revertedWith("QDAOTimelock::executeTransaction: Transaction hasn't surpassed time lock.");
         
         await ethers.provider.send("evm_increaseTime", [2*24*60*60])
-
-        console.log("bryre", await timelock.contractAddress())
 
         var result = send(admin, delegator.address, governor, 'executeProposal', [1])
         await expect(result).to.emit(delegator, 'ProposalExecuted')

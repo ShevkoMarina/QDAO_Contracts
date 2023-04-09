@@ -40,7 +40,7 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         require(_token != address(0), "QDAOGovernor::initialize: invalid token address");
 
         timelock = QDAOTimelockInterface(_timelock);
-        token = QDAOTokenV0Interface(_token);
+        token = QDAOTokenInterface(_token);
         votingPeriod = _votingPeriod;
         quorumNumerator = _quorumNumerator;
 
@@ -113,6 +113,7 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
 
         require(getProposalState(proposalId) == ProposalState.Succeeded, "QDAOGovernor::queue: proposal must have Succeded state");
 
+        // Добавить проверку - если нет кворума - то вызывать должен админ
         Proposal storage proposal = proposals[proposalId];
         uint eta = block.timestamp.add(timelock.delay());
 
@@ -219,7 +220,7 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         Receipt storage receipts = proposal.receipts[voter];
         require(receipts.hasVoted == false, 'QDAOGovernor::vote: voter already voted');
 
-        uint weight = getVotes(voter);
+        uint weight = token.getPastVotes(voter, proposal.startBlock);
         require(weight > 0, "QDAOGovernor::vote: voter has no QDAO tokens");
 
         if (support) {
@@ -232,12 +233,8 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         receipts.support = support;
         receipts.votes = weight;
 
+        emit VoteCasted(voter, proposal.id, support, weight);
         return weight;
-    }
-
-
-    function getVotes(address account) internal view returns (uint) {
-        return token.getCurrentVotes(account);
     }
 
     function getQuorum() public view returns (uint) {
