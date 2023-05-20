@@ -67,7 +67,7 @@ contract QDAOTimelock is QDAOTimelockInterface {
         bytes memory data,
         uint eta) 
         public onlyGovernorDelegator returns (bytes32)  {
-
+            
             console.log("Timelock caller: ", msg.sender);
             require(eta >= getBlockTimestamp().add(delay), "QDAOTimelock::queueTransaction: Estimated execution block must satisfy delay.");
 

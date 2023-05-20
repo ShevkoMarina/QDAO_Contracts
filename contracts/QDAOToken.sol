@@ -1,21 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.9;
 
-import "hardhat/console.sol";
-
 contract QDAOToken {
     
+    /// @notice admin account address
+    address public admin;
+
     /// @notice EIP-20 token name for this token
-    string public constant name = "QDAOToken";
+    string public name;
 
     /// @notice EIP-20 token symbol for this token
-    string public constant symbol = "QDAO";
+    string public symbol;
 
     /// @notice EIP-20 token decimals for this token
     uint8 public constant decimals = 18;
 
     /// @notice Total number of tokens in circulation
-    uint public totalSupply = 10000; 
+    uint public totalSupply; 
 
     /// @notice Allowance amounts on behalf of others
     mapping (address => mapping (address => uint96)) internal allowances;
@@ -50,15 +51,16 @@ contract QDAOToken {
     /// @notice The standard EIP-20 approval event
     event Approval(address indexed owner, address indexed spender, uint256 amount);
 
-    /**
-     * @notice Construct a new Comp token
-     * @param account The initial account to grant all the tokens
-     */
-    constructor(address account, uint96 _totalSupply) public {
+    constructor(uint96 _totalSupply, string memory _name, string memory _symbol) {
 
         totalSupply = _totalSupply;
-        balances[account] = uint96(totalSupply);
-        emit Transfer(address(0), account, totalSupply);
+        admin = msg.sender;
+        name = _name;
+        symbol = _symbol;
+
+        balances[admin] = uint96(totalSupply);
+
+        emit Transfer(address(0), admin, totalSupply);
     }
 
     /// @notice Get the number of tokens `spender` is approved to spend on behalf of `account`

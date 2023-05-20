@@ -8,7 +8,7 @@ async function deployFixture() {
     const [admin, proposer, voter1, voter2, voter3, signer1, signer2, signer3] = await ethers.getSigners();
 
     const QDAOToken = await ethers.getContractFactory("QDAOToken");
-    const token = await QDAOToken.connect(admin).deploy(admin.address, 10000);
+    const token = await QDAOToken.connect(admin).deploy(10000, "QDAOToken", "QDAO");
   //  console.log("QDAOToken deployed to address:", token.address);
 
     const QDAOTimelock = await ethers.getContractFactory("QDAOTimelock");
@@ -19,12 +19,15 @@ async function deployFixture() {
     const governor = await QDAOGovernor.connect(admin).deploy();
   //  console.log("QDAOGovernor deployed to address:", governor.address);
 
+    const QDAOMultisig = await ethers.getContractFactory("QDAOMultisig");
+    const multisig = await QDAOMultisig.connect(admin).deploy();
+
     const QDAOGovernorDelegator = await ethers.getContractFactory("QDAOGovernorDelegator");
     const delegator = await QDAOGovernorDelegator.connect(admin)
-    .deploy(timelock.address, token.address, admin.address, governor.address, 6, 5, [signer1.address, signer2.address, signer3.address], 2);
+    .deploy(timelock.address, token.address, multisig.address, governor.address, 6, 5);
   //  console.log("QDAOGovernorDelegator deployed to address:", delegator.address);
 
-    return {token, delegator, governor, timelock, admin}
+    return {token, delegator, governor, timelock, admin,  multisig}
 }
 
 async function mineNBlocks(n) {
@@ -46,6 +49,7 @@ async function send(sender, to_address, contract, method, params) {
 
 describe("Initial tests", function () {
     
+  
     it("Deploy contracts", async function () {
 
         const {token, delegator, governor, timelock, admin} = await deployFixture();
@@ -57,11 +61,11 @@ describe("Initial tests", function () {
 
     it("Governor initialize only once", async function () {
 
-        var {token, delegator, governor, timelock, admin} = await deployFixture();
+        var {token, delegator, governor, timelock, admin,  multisig} = await deployFixture();
         var [admin, proposer, voter1, voter2, voter3, signer1, signer2, signer3] = await ethers.getSigners();
 
         var result = send(admin , delegator.address, governor, "initialize", 
-        [timelock.address, token.address, 5, 6, [signer1.address, signer2.address, signer3.address], 2]);
+        [timelock.address, token.address, multisig.address, 5, 6]);
         
         await expect(result).to.be.revertedWith('QDAOGovernor::initialize: can be only be initialized once');
 
@@ -69,8 +73,8 @@ describe("Initial tests", function () {
     
     it("Create proposal with valid params", async function ()  {
 
-        var {token, delegator, governor, timelock, admin} = await deployFixture();
-        var [admin, proposer] = await ethers.getSigners();
+        var {token, delegator, governor, timelock, admin, multisig} = await deployFixture();
+        var [admin, proposer, voter1, voter2, voter3, signer1, signer2, signer3] = await ethers.getSigners();
 
         var targets = [governor.address]
         var values = [0]
@@ -79,15 +83,19 @@ describe("Initial tests", function () {
 
         var currentBlock = await ethers.provider.getBlockNumber();
 
-        var result = send(proposer , delegator.address, governor, "createProposal", [targets, values, calldatas]);
+        var result = await send(admin, multisig.address, multisig, 'addPrincipal', [signer1.address, 1]);
+        var result = await send(admin, multisig.address, multisig, 'addPrincipal', [signer2.address, 2]);
+
+        var result = await send(proposer , delegator.address, governor, "createProposal", [targets, values, calldatas]);
 
         await expect(result).to.emit(delegator, "ProposalCreated")
         .withArgs(1, proposer.address, targets, values, calldatas,
-            currentBlock + 1, 
-            currentBlock + 7)
+            currentBlock + 3, 
+            currentBlock + 9)
     })
 
 
+    
     it("Distribute tokens between voters", async function ()  {
 
         var {token, delegator, governor, timelock, admin} = await deployFixture();
@@ -155,7 +163,6 @@ describe("Initial tests", function () {
       await token.connect(admin).transfer(voter2.address, 30);
       await token.connect(admin).transfer(voter3.address, 1);
       
-
       await token.connect(voter1).delegate(voter1.address);
       expect(await token.getCurrentVotes(voter1.address)).to.equal(20)
 
@@ -165,10 +172,11 @@ describe("Initial tests", function () {
       expect(await token.getCurrentVotes(voter3.address)).to.equal(31)
     })
    
+    
     it ("Delagator: Vote for proposal succeed state", async function () {
 
-        var {token, delegator, governor, timelock, admin} = await deployFixture();
-        var [admin, proposer, voter1, voter2, voter3] = await ethers.getSigners();
+        var {token, delegator, governor, timelock, admin, multisig} = await deployFixture();
+        var [admin, proposer, voter1, voter2, voter3, signer1, signer2, signer3] = await ethers.getSigners();
 
         await token.connect(admin).transfer(voter1.address, 200);
         await token.connect(voter1).delegate(voter1.address);
@@ -179,6 +187,9 @@ describe("Initial tests", function () {
         var values = [0]
         var calldata = governor.interface.encodeFunctionData('updateVotingPeriod', [7])
         var calldatas = [calldata]
+
+        var result = await send(admin, multisig.address, multisig, 'addPrincipal', [signer1.address, 1]);
+        var result = await send(admin, multisig.address, multisig, 'addPrincipal', [signer2.address, 2]);
 
         var startBlock = await ethers.provider.getBlockNumber();
         await send(proposer , delegator.address, governor, "createProposal", [targets, values, calldatas])
@@ -198,9 +209,13 @@ describe("Initial tests", function () {
 
     it ("Delagator: Vote for proposal to no quorum state with signers approve", async function () {
 
-        var {token, delegator, governor, timelock, admin} = await deployFixture();
+        var {token, delegator, governor, timelock, admin, multisig} = await deployFixture();
         await timelock.connect(admin).setDelegator(delegator.address);
         var [admin, proposer, voter1, voter2, voter3, signer1, signer2, signer3] = await ethers.getSigners();
+
+        var result = await send(admin, multisig.address, multisig, 'addPrincipal', [signer1.address, 1]);
+        var result = await send(admin, multisig.address, multisig, 'addPrincipal', [signer2.address, 2]);
+        var result = await send(admin, multisig.address, multisig, 'addPrincipal', [signer3.address, 2]);
 
         var targets = [governor.address]
         var values = [0]
@@ -225,9 +240,6 @@ describe("Initial tests", function () {
         var result = send(admin, delegator.address, governor, 'queueProposal', [1])
         await expect(result).to.be.revertedWith('QDAOGovernor::queue: proposal must have Succeded state');
 
-        var result = send(admin, delegator.address, governor, 'queueProposal', [1])
-        await expect(result).to.be.revertedWith('QDAOGovernor::queue: proposal must have Succeded state');
-
         var result = send(signer1, delegator.address, governor, 'approve', [1]); 
         await expect(result).to.emit(delegator, 'ProposalApproved').withArgs(signer1.address, 1)
 
@@ -243,7 +255,7 @@ describe("Initial tests", function () {
 
     it ("Delagator: Execute queued proposal", async function () {
 
-        var {token, delegator, governor, timelock, admin} = await deployFixture();
+        var {token, delegator, governor, timelock, admin, multisig} = await deployFixture();
         await timelock.connect(admin).setDelegator(delegator.address);
         var [admin, proposer, voter1, voter2, voter3, signer1, signer2, signer3] = await ethers.getSigners();
 
@@ -251,6 +263,10 @@ describe("Initial tests", function () {
         var values = [0]
         var calldata = governor.interface.encodeFunctionData('updateVotingPeriod', [7])
         var calldatas = [calldata]
+
+        var result = await send(admin, multisig.address, multisig, 'addPrincipal', [signer1.address, 1]);
+        var result = await send(admin, multisig.address, multisig, 'addPrincipal', [signer2.address, 2]);
+        var result = await send(admin, multisig.address, multisig, 'addPrincipal', [signer3.address, 2]);
 
         await token.connect(admin).transfer(voter1.address, 300);
         await token.connect(voter1).delegate(voter1.address);
@@ -277,4 +293,5 @@ describe("Initial tests", function () {
         await expect(result).to.emit(delegator, 'ProposalExecuted')
         .withArgs(1);
     })
+    
 })

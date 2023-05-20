@@ -10,38 +10,52 @@ contract QDAOGovernorDelegator is QDAOGovernorDelegatorStorage, GovernorEvents {
 	constructor (
 			address _timelock,
 			address _token,
-			address _admin,
+            address _multisig,
 	        address _implementation,
 	        uint _votingPeriod,
-            uint _quorumNumerator,
-            address[] memory _signers,
-            uint8 _requiredApprovals) public {
+            uint _quorumNumerator) public {
                 
         admin = msg.sender;
 
-        delegateTo(_implementation, abi.encodeWithSignature("initialize(address,address,uint256,uint256,address[],uint8)",
+        delegateTo(_implementation, abi.encodeWithSignature("initialize(address,address,address,uint256,uint256)",
                                                             _timelock,
                                                             _token,
+                                                            _multisig,
                                                             _votingPeriod,
-                                                            _quorumNumerator,
-                                                            _signers,
-                                                            _requiredApprovals));
+                                                            _quorumNumerator));
 
-        setImplementation(_implementation);
-
-        admin = _admin;
+        implementation = _implementation;
 	}
 
+    function setPendingImplementation(address _pendingImplementation) public {
+        require(msg.sender == admin, "QDAOGovernorDelegator::setImplementation: admin only");
+        require( _pendingImplementation != address(0), "QDAOGovernorDelegator::setImplementation: invalid implementation address");
+
+        pendingImplementation = _pendingImplementation;
+    }
 
 	/// @notice Called by the admin to update the implementation of the delegator
-    function setImplementation(address _implementation) public {
+    function setImplementation() public {
         require(msg.sender == admin, "QDAOGovernorDelegator::setImplementation: admin only");
-        require( _implementation != address(0), "QDAOGovernorDelegator::setImplementation: invalid implementation address");
+        require(calculateApprovals(changeImplemantationMultisig) >= multisig.requiredApprovals(), "QDAOGovernorDelegator::setImplementation: not enough approvals");
 
         address oldImplementation = implementation;
-        implementation =  _implementation;
+        implementation = pendingImplementation;
 
         emit NewImplementation(oldImplementation, implementation);
+    }
+
+    function calculateApprovals(MultiSig storage changeImplemantationMultisig) internal view returns (uint) {
+        uint8 approvals = 0;
+        for (uint8 i = 0; i < multisig.getPrincipals().length; i++) 
+        {
+            if (changeImplemantationMultisig.principalApproved[multisig.getPrincipals()[i]]) 
+            {
+                approvals++;
+            }
+        }
+
+        return approvals;
     }
 
     /// @notice Internal method to delegate execution to another contract

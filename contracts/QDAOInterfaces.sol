@@ -28,12 +28,30 @@ contract GovernorEvents {
 contract QDAOGovernorDelegatorStorage {
     /// @notice Administrator for this contract
     address public admin;
-
-    /// @notice Pending administrator for this contract
-    address public pendingAdmin;
+    
+    address public pendingImplementation;
 
     /// @notice Active implementation of Governor
     address public implementation;
+
+    
+
+        /// @notice Multisig with addresses of principals who approve proposals in crisis sutuation
+    QDAOMultisigInterface public multisig;
+
+    MultiSig public changeImplemantationMultisig;
+
+     /// @notice A list of principals who can manage crisis situation
+    struct MultiSig {
+
+        /// @notice A list of principal's addresses who can manage crisis situation
+        address[] signers;
+
+        /// @notice A number of required approvals from principals
+        uint8 requiredApprovals;
+
+        mapping (address => bool) principalApproved;
+    }
 }
 
 
@@ -53,9 +71,6 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
 
     /// @notice The address of the QDAO token
     QDAOTokenInterface public token;
-
-    /// @notice Multisig with addresses of principals who approve proposals in crisis sutuation
-    MultiSig public multisig;
 
     /// @notice The record of all proposals ever proposed
     mapping (uint => Proposal) public proposals;
@@ -117,16 +132,6 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
     }
 
 
-    /// @notice A list of principals who can manage crisis situation
-    struct MultiSig {
-
-        /// @notice A list of principal's addresses who can manage crisis situation
-        address[] signers;
-
-        /// @notice A number of required approvals from principals
-        uint8 requiredApprovals;
-    }
-
     /// @notice Possible states that a proposal may be in
     enum ProposalState {
         Active,
@@ -160,7 +165,8 @@ interface QDAOTokenInterface {
     function totalSupply() external view returns (uint256);
 }
 
-interface QDAOTokenV0Interface {
-    function getCurrentVotes(address account) external view returns (uint256);
-    function totalSupply() external view returns (uint256); 
+interface QDAOMultisigInterface {
+    function getPrincipals() external view returns (address[] memory);
+    function requiredApprovals() external view returns (uint);
+    function addPrincipal(address _principal, uint8 _requiredApprovals) external;
 }
