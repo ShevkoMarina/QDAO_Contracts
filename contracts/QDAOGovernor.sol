@@ -26,12 +26,23 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         votingPeriod = _newValue;
     }
 
+    function updateQuorum(uint _newValue) public {
+        require(msg.sender == timelock.contractAddress(), "DAOGovernor: caller is not the timelock");
+        quorumNumerator = _newValue;
+    }
+
+    function updateVotingDelay(uint _newValue) public {
+        require(msg.sender == timelock.contractAddress(), "DAOGovernor: caller is not the timelock");
+        votingDelay = _newValue;
+    }
+
     function initialize(
         address _timelock,
         address _token,
         address _multisig,
         uint _votingPeriod,
-        uint _quorumNumerator) 
+        uint _quorumNumerator,
+        uint _votingDelay) 
         public onlyAdmin {
         
         require(address(timelock) == address(0), "QDAOGovernor::initialize: can be only be initialized once");
@@ -43,6 +54,7 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         multisig = QDAOMultisigInterface(_multisig);
         votingPeriod = _votingPeriod;
         quorumNumerator = _quorumNumerator;
+        votingDelay = _votingDelay;
     }
 
     function approve(uint proposalId) public {
@@ -74,7 +86,7 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         require(address(timelock) != address(0), "QDAOGovernor::createProposal: Governor is not initialized");
         require(multisig.requiredApprovals() > 0, "QDAOGovernor::createProposal: Mutisig not created");
 
-        uint startBlock = block.number;
+        uint startBlock = block.number.add(votingDelay);
         uint endBlock = startBlock.add(votingPeriod);
 
         proposalCount++;
@@ -169,6 +181,9 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
 
         if (proposal.canceled) {
             return ProposalState.Canceled;
+        }
+        else if (block.number <= proposal.startBlock) {
+            return ProposalState.Pending;
         }
         else if (block.number <= proposal.endBlock) {
             return ProposalState.Active;

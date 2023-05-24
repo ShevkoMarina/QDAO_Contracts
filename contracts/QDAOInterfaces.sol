@@ -36,12 +36,12 @@ contract QDAOGovernorDelegatorStorage {
 
     
 
-        /// @notice Multisig with addresses of principals who approve proposals in crisis sutuation
+    /// @notice Multisig with addresses of principals who approve proposals in crisis sutuation
     QDAOMultisigInterface public multisig;
 
     MultiSig public changeImplemantationMultisig;
 
-     /// @notice A list of principals who can manage crisis situation
+    /// @notice A list of principals who can manage crisis situation
     struct MultiSig {
 
         /// @notice A list of principal's addresses who can manage crisis situation
@@ -65,6 +65,9 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
 
     /// @notice The total number of proposals
     uint public proposalCount;
+
+    /// @notice Voting delay
+    uint public votingDelay;
 
     /// @notice The address of the Timelock contract
     QDAOTimelockInterface public timelock;
@@ -134,6 +137,7 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
 
     /// @notice Possible states that a proposal may be in
     enum ProposalState {
+        Pending,
         Active,
         Canceled,
         Defeated,

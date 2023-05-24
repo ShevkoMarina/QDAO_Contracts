@@ -24,7 +24,7 @@ async function deployFixture() {
 
     const QDAOGovernorDelegator = await ethers.getContractFactory("QDAOGovernorDelegator");
     const delegator = await QDAOGovernorDelegator.connect(admin)
-    .deploy(timelock.address, token.address, multisig.address, governor.address, 6, 5);
+    .deploy(timelock.address, token.address, multisig.address, governor.address, 6, 5, 0);
   //  console.log("QDAOGovernorDelegator deployed to address:", delegator.address);
 
     return {token, delegator, governor, timelock, admin,  multisig}
@@ -65,7 +65,7 @@ describe("Initial tests", function () {
         var [admin, proposer, voter1, voter2, voter3, signer1, signer2, signer3] = await ethers.getSigners();
 
         var result = send(admin , delegator.address, governor, "initialize", 
-        [timelock.address, token.address, multisig.address, 5, 6]);
+        [timelock.address, token.address, multisig.address, 5, 6, 0]);
         
         await expect(result).to.be.revertedWith('QDAOGovernor::initialize: can be only be initialized once');
 
