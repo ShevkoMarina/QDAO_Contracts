@@ -207,9 +207,6 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
 
             return ProposalState.Executed;
         } 
-        else if (block.timestamp >= proposal.eta.add(timelock.GRACE_PERIOD())) {
-            return ProposalState.Expired;
-        } 
         else {
             return ProposalState.Queued;
         }
