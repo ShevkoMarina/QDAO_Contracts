@@ -80,7 +80,9 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
     function createProposal(
         address[] memory targets,
         uint[] memory values, 
-        bytes[] memory calldatas) 
+        bytes[] memory calldatas,
+        string memory name,
+        string memory description) 
         public returns (uint) {
 
         require(address(timelock) != address(0), "QDAOGovernor::createProposal: Governor is not initialized");
@@ -105,7 +107,7 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         newProposal.startBlock = startBlock;
         newProposal.endBlock = endBlock;
 
-        emit ProposalCreated(newProposal.id, msg.sender, targets, values, calldatas, startBlock, endBlock);
+        emit ProposalCreated(newProposal.id, msg.sender, targets, values, calldatas, startBlock, endBlock, name, description);
 
         return newProposal.id;
     }

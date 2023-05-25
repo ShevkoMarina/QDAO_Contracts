@@ -4,7 +4,7 @@ pragma solidity ^0.8.10;
 
 contract GovernorEvents {
     /// @notice An event emitted when a new proposal is created
-    event ProposalCreated(uint id, address proposer, address[] targets, uint[] values, bytes[] calldatas, uint startBlock, uint endBlock);
+    event ProposalCreated(uint id, address proposer, address[] targets, uint[] values, bytes[] calldatas, uint startBlock, uint endBlock, string name, string description);
 
     /// @notice An event emitted when a proposal has been canceled 
     event ProposalCanceled(uint id);

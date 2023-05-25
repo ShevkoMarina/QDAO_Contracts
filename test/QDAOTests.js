@@ -12,7 +12,7 @@ async function deployFixture() {
   //  console.log("QDAOToken deployed to address:", token.address);
 
     const QDAOTimelock = await ethers.getContractFactory("QDAOTimelock");
-    const timelock = await QDAOTimelock.connect(admin).deploy(admin.address, 2*24*60*60); // 172800
+    const timelock = await QDAOTimelock.connect(admin).deploy(2*24*60*60); // 172800
    // console.log("QDAOTimelock deployed to address:", timelock.address);
 
     const QDAOGovernor = await ethers.getContractFactory("QDAOGovernor");
@@ -86,12 +86,12 @@ describe("Initial tests", function () {
         var result = await send(admin, multisig.address, multisig, 'addPrincipal', [signer1.address, 1]);
         var result = await send(admin, multisig.address, multisig, 'addPrincipal', [signer2.address, 2]);
 
-        var result = await send(proposer , delegator.address, governor, "createProposal", [targets, values, calldatas]);
+        var result = await send(proposer , delegator.address, governor, "createProposal", [targets, values, calldatas, "name", "descr"]);
 
         await expect(result).to.emit(delegator, "ProposalCreated")
         .withArgs(1, proposer.address, targets, values, calldatas,
             currentBlock + 3, 
-            currentBlock + 9)
+            currentBlock + 9, "name", "descr")
     })
 
 
@@ -192,7 +192,7 @@ describe("Initial tests", function () {
         var result = await send(admin, multisig.address, multisig, 'addPrincipal', [signer2.address, 2]);
 
         var startBlock = await ethers.provider.getBlockNumber();
-        await send(proposer , delegator.address, governor, "createProposal", [targets, values, calldatas])
+        await send(proposer , delegator.address, governor, "createProposal", [targets, values, calldatas, "name", "descr"])
 
         await send(voter1, delegator.address, governor, 'vote', [1, true])
         await send(voter2, delegator.address, governor, 'vote', [1, true])
@@ -229,7 +229,7 @@ describe("Initial tests", function () {
         await token.connect(admin).transfer(voter2.address, 1);
         await token.connect(voter2).delegate(voter2.address);
 
-        await send(proposer , delegator.address, governor, "createProposal", [targets, values, calldatas])
+        await send(proposer , delegator.address, governor, "createProposal", [targets, values, calldatas, "name", "descr"])
 
         await send(voter1, delegator.address, governor, 'vote', [1, true])
         await send(voter2, delegator.address, governor, 'vote', [1, true])
@@ -274,7 +274,7 @@ describe("Initial tests", function () {
         await token.connect(voter2).delegate(voter2.address);
 
         var startBlock = await ethers.provider.getBlockNumber();
-        await send(proposer , delegator.address, governor, "createProposal", [targets, values, calldatas])
+        await send(proposer , delegator.address, governor, "createProposal", [targets, values, calldatas, "name", "descr"])
         await send(voter1, delegator.address, governor, 'vote', [1, true])
         await send(voter2, delegator.address, governor, 'vote', [1, true])
 

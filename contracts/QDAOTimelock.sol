@@ -32,12 +32,12 @@ contract QDAOTimelock is QDAOTimelockInterface {
 
     mapping (bytes32 => bool) public queuedTransactions;
 
-    constructor(address _admin, uint _delay) {
+    constructor(uint _delay) {
 
         require(_delay >= MINIMUM_DELAY, "QDAOTimelock::constructor: Delay must exceed minimum delay.");
         require(_delay <= MAXIMUM_DELAY, "QDAOTimelock::constructor: Delay must not exceed maximum delay.");
 
-        admin = _admin;
+        admin = msg.sender;
         delay = _delay;
         contractAddress = address(this);
     }
