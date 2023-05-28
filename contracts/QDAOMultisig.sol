@@ -4,6 +4,8 @@ pragma experimental ABIEncoderV2;
 
 contract QDAOMultisig {
 
+    event PrincipalAdded(address _account);
+
     address public admin;
    
     address[] public principals;
@@ -23,6 +25,8 @@ contract QDAOMultisig {
 
         principals.push(_principal);
         requiredApprovals = _requiredApprovals;
+
+        emit PrincipalAdded(_principal);
     }
 
     function getPrincipals() public view returns (address[] memory){

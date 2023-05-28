@@ -144,7 +144,6 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
         NoQuorum,
         Succeeded,
         Queued,
-        Expired,
         Executed
     }
     
@@ -155,7 +154,6 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
 interface QDAOTimelockInterface {
 
     function delay() external view returns (uint);
-    function GRACE_PERIOD() external view returns (uint);
     function contractAddress() external view returns (address);
     function acceptAdmin() external;
     function queuedTransactions(bytes32 hash) external view returns (bool);

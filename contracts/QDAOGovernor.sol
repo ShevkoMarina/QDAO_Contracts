@@ -36,6 +36,14 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         votingDelay = _newValue;
     }
 
+    function isAccountVoted(uint _proposalId, address _account) public returns (bool) {
+
+        Proposal storage proposal = proposals[proposalCount];
+        Receipt storage receipt = proposal.receipts[_account];
+
+        return receipt.hasVoted;
+    }
+
     function initialize(
         address _timelock,
         address _token,
@@ -190,6 +198,9 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         else if (block.number <= proposal.endBlock) {
             return ProposalState.Active;
         } 
+        else if (proposal.forVotes == 0 && proposal.againstVotes == 0) {
+            return ProposalState.NoQuorum;
+        }
         else if (proposal.forVotes <= proposal.againstVotes) {
             return ProposalState.Defeated;
         } 
