@@ -72,7 +72,9 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         require(proposal.hasApproved[msg.sender] == false, "QDAOGovernor::approve: signer has already approved");
         proposal.hasApproved[msg.sender] = true;
 
-        emit ProposalApproved(msg.sender, proposalId);
+        if (calculateApprovals(proposal) >= multisig.requiredApprovals()) {
+            emit ProposalApproved(msg.sender, proposalId);
+        }
     }
 
     function containsValue(address[] memory array, address value) public pure returns (bool) {

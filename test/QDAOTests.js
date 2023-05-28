@@ -241,7 +241,6 @@ describe("Initial tests", function () {
         await expect(result).to.be.revertedWith('QDAOGovernor::queue: proposal must have Succeded state');
 
         var result = send(signer1, delegator.address, governor, 'approve', [1]); 
-        await expect(result).to.emit(delegator, 'ProposalApproved').withArgs(signer1.address, 1)
 
         var result = send(admin, delegator.address, governor, 'queueProposal', [1])
         await expect(result).to.be.revertedWith('QDAOGovernor::queue: proposal must have Succeded state');
