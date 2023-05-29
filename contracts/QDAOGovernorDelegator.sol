@@ -6,6 +6,7 @@ import "./QDAOInterfaces.sol";
 contract QDAOGovernorDelegator is QDAOGovernorDelegatorStorage, GovernorEvents {
 
     event NewImplementation(address oldImplementation, address implementation);
+    event NewImplementationApproved();
 
 	constructor (
 			address _timelock,
@@ -36,28 +37,67 @@ contract QDAOGovernorDelegator is QDAOGovernorDelegatorStorage, GovernorEvents {
         pendingImplementation = _pendingImplementation;
     }
 
+    function approveImplementationChange() public {
+
+        require(containsValue(multisig.getPrincipals(), msg.sender), "QDAOGovernor::approve: signer is not from list of principals");
+        require(changeHasApproved[msg.sender] == false, "QDAOGovernor::approve: signer has already approved");
+        changeHasApproved[msg.sender] = true;
+
+        if (calculateApprovals() >= multisig.requiredApprovals()) {
+            emit NewImplementationApproved();
+        }
+    }
+
 	/// @notice Called by the admin to update the implementation of the delegator
     function setImplementation() public {
         require(msg.sender == admin, "QDAOGovernorDelegator::setImplementation: admin only");
-        require(calculateApprovals(changeImplemantationMultisig) >= multisig.requiredApprovals(), "QDAOGovernorDelegator::setImplementation: not enough approvals");
+        require(calculateApprovals() >= multisig.requiredApprovals(), "QDAOGovernorDelegator::setImplementation: not enough approvals");
 
         address oldImplementation = implementation;
         implementation = pendingImplementation;
 
+        pendingImplementation = address(0);
+        setDefault();
+
         emit NewImplementation(oldImplementation, implementation);
     }
 
-    function calculateApprovals(MultiSig storage changeImplemantationMultisig) internal view returns (uint) {
+    function isPrincipalApproved(address _account) public view returns (bool) {
+        return changeHasApproved[_account];
+    }
+
+    function isChangeApproved() public view returns (bool) {
+        return calculateApprovals() >= multisig.requiredApprovals();
+    }
+
+    function calculateApprovals() internal view returns (uint) {
         uint8 approvals = 0;
         for (uint8 i = 0; i < multisig.getPrincipals().length; i++) 
         {
-            if (changeImplemantationMultisig.principalApproved[multisig.getPrincipals()[i]]) 
+            if (changeHasApproved[multisig.getPrincipals()[i]]) 
             {
                 approvals++;
             }
         }
 
         return approvals;
+    }
+
+    function setDefault() private {
+        for (uint8 i = 0; i < multisig.getPrincipals().length; i++) 
+        {
+           changeHasApproved[multisig.getPrincipals()[i]] = false;
+        }
+    }
+
+    function containsValue(address[] memory array, address value) public pure returns (bool) {
+        for (uint i = 0; i < array.length; i++) {
+            if (array[i] == value) {
+                return true;
+            }
+        }
+        
+        return false;
     }
 
     /// @notice Internal method to delegate execution to another contract

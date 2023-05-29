@@ -34,24 +34,10 @@ contract QDAOGovernorDelegatorStorage {
     /// @notice Active implementation of Governor
     address public implementation;
 
-    
-
     /// @notice Multisig with addresses of principals who approve proposals in crisis sutuation
     QDAOMultisigInterface public multisig;
-
-    MultiSig public changeImplemantationMultisig;
-
-    /// @notice A list of principals who can manage crisis situation
-    struct MultiSig {
-
-        /// @notice A list of principal's addresses who can manage crisis situation
-        address[] signers;
-
-        /// @notice A number of required approvals from principals
-        uint8 requiredApprovals;
-
-        mapping (address => bool) principalApproved;
-    }
+    
+    mapping (address => bool) changeHasApproved;
 }
 
 

@@ -16,9 +16,6 @@ contract QDAOTimelock is QDAOTimelockInterface {
     event ExecuteTransaction(bytes32 indexed txHash, address indexed target, uint value, bytes data, uint eta);
     event QueueTransaction(bytes32 indexed txHash, address indexed target, uint value, bytes data, uint eta);
 
-    uint public constant MINIMUM_DELAY = 2 days;
-    uint public constant MAXIMUM_DELAY = 30 days;
-
     address public admin;
 
     address public pendingAdmin;
@@ -32,9 +29,6 @@ contract QDAOTimelock is QDAOTimelockInterface {
     mapping (bytes32 => bool) public queuedTransactions;
 
     constructor(uint _delay) {
-
-        require(_delay >= MINIMUM_DELAY, "QDAOTimelock::constructor: Delay must exceed minimum delay.");
-        require(_delay <= MAXIMUM_DELAY, "QDAOTimelock::constructor: Delay must not exceed maximum delay.");
 
         admin = msg.sender;
         delay = _delay;
