@@ -28,9 +28,9 @@ contract QDAOTimelock is QDAOTimelockInterface {
 
     mapping (bytes32 => bool) public queuedTransactions;
 
-    constructor(uint _delay) {
+    constructor(uint _delay, address _admin) {
 
-        admin = msg.sender;
+        admin = _admin;
         delay = _delay;
         contractAddress = address(this);
     }

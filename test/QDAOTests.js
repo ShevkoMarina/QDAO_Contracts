@@ -8,11 +8,11 @@ async function deployFixture() {
     const [admin, proposer, voter1, voter2, voter3, signer1, signer2, signer3] = await ethers.getSigners();
 
     const QDAOToken = await ethers.getContractFactory("QDAOToken");
-    const token = await QDAOToken.connect(admin).deploy(10000, "QDAOToken", "QDAO");
+    const token = await QDAOToken.connect(admin).deploy(10000, "QDAOToken", "QDAO", admin.address);
   //  console.log("QDAOToken deployed to address:", token.address);
 
     const QDAOTimelock = await ethers.getContractFactory("QDAOTimelock");
-    const timelock = await QDAOTimelock.connect(admin).deploy(2*24*60*60); // 172800
+    const timelock = await QDAOTimelock.connect(admin).deploy(2*24*60*60, admin.address); // 172800
    // console.log("QDAOTimelock deployed to address:", timelock.address);
 
     const QDAOGovernor = await ethers.getContractFactory("QDAOGovernor");
@@ -20,11 +20,11 @@ async function deployFixture() {
   //  console.log("QDAOGovernor deployed to address:", governor.address);
 
     const QDAOMultisig = await ethers.getContractFactory("QDAOMultisig");
-    const multisig = await QDAOMultisig.connect(admin).deploy();
+    const multisig = await QDAOMultisig.connect(admin).deploy(admin.address);
 
     const QDAOGovernorDelegator = await ethers.getContractFactory("QDAOGovernorDelegator");
     const delegator = await QDAOGovernorDelegator.connect(admin)
-    .deploy(timelock.address, token.address, multisig.address, governor.address, 6, 5, 0);
+    .deploy(timelock.address, token.address, multisig.address, governor.address, 6, 5, 0, admin.address);
   //  console.log("QDAOGovernorDelegator deployed to address:", delegator.address);
 
     return {token, delegator, governor, timelock, admin,  multisig}

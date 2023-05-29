@@ -51,10 +51,10 @@ contract QDAOToken {
     /// @notice The standard EIP-20 approval event
     event Approval(address indexed owner, address indexed spender, uint256 amount);
 
-    constructor(uint96 _totalSupply, string memory _name, string memory _symbol) {
+    constructor(uint96 _totalSupply, string memory _name, string memory _symbol, address _admin) {
 
         totalSupply = _totalSupply;
-        admin = msg.sender;
+        admin = _admin;
         name = _name;
         symbol = _symbol;
 

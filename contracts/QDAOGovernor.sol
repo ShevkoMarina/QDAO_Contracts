@@ -44,6 +44,12 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         return receipt.hasVoted;
     }
 
+    function isPrincipalApproved(uint _proposalId, address _account) public returns (bool) {
+        Proposal storage proposal = proposals[proposalCount];
+        
+        return proposal.hasApproved[_account];
+    }
+
     function initialize(
         address _timelock,
         address _token,

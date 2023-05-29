@@ -12,8 +12,8 @@ contract QDAOMultisig {
 
     uint8 public requiredApprovals;
     
-    constructor() {
-        admin = msg.sender;
+    constructor(address _admin) {
+        admin = _admin;
     }
 
     function addPrincipal(
