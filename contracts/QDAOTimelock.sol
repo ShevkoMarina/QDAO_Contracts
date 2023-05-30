@@ -3,14 +3,11 @@ pragma solidity ^0.8.10;
 
 import "./SafeMath.sol";
 import "./QDAOInterfaces.sol";
-import "hardhat/console.sol";
 
 contract QDAOTimelock is QDAOTimelockInterface {
 
     using SafeMath for uint;
 
-    event NewAdmin(address indexed newAdmin);
-    event NewPendingAdmin(address indexed newPendingAdmin);
     event NewDelay(uint indexed newDelay);
     event CancelTransaction(bytes32 indexed txHash, address indexed target, uint value, bytes data, uint eta);
     event ExecuteTransaction(bytes32 indexed txHash, address indexed target, uint value, bytes data, uint eta);
@@ -61,7 +58,6 @@ contract QDAOTimelock is QDAOTimelockInterface {
         uint eta) 
         public onlyGovernorDelegator returns (bytes32)  {
             
-            console.log("Timelock caller: ", msg.sender);
             require(eta >= getBlockTimestamp().add(delay), "QDAOTimelock::queueTransaction: Estimated execution block must satisfy delay.");
 
             bytes32 txHash = keccak256(abi.encode(target, value, data, eta));
@@ -106,18 +102,6 @@ contract QDAOTimelock is QDAOTimelockInterface {
         require(success, "QDAOTimelock::executeTransaction: Transaction execution reverted.");
 
         return returnData;
-    }
-
-    /// @notice Set new administrator for pending
-    function setPendingAdmin(address _pendingAdmin) public onlyTimelock {
-        pendingAdmin = _pendingAdmin;
-    }
-
-    /// @notice Accept pending administrator
-    function acceptAdmin() public {
-        require(msg.sender == pendingAdmin, "QDAOTimelock::acceptAdmin: Call must come from pending admin.");
-        admin = msg.sender;
-        pendingAdmin = address(0);
     }
 
     /// @notice Sets delegator contract's address

@@ -1,14 +1,7 @@
 const express = require('express')
 const app = express();
-import { getByteCode } from './deploy'
+const { ethers } = require('hardhat');
 
-
-async function app.get('/bytecode', (req, res) => {
-    res.status(200).send(
-        {
-            bytecode: await getByteCode(QDAOToken)
-        })
-});
 
 
 app.listen(8000, () => {

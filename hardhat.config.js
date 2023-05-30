@@ -9,5 +9,11 @@ module.exports = {
     hardhat: {
       allowUnlimitedContractSize: false
     },
+    ganache: {
+      url: 'http://192.168.1.45:8545', // Ganache URL
+      accounts: {
+        mnemonic: 'myself march cram diary tunnel alarm reason kit shadow match cheap shed'
+      },
+    },
   }
  };

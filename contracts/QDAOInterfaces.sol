@@ -141,7 +141,6 @@ interface QDAOTimelockInterface {
 
     function delay() external view returns (uint);
     function contractAddress() external view returns (address);
-    function acceptAdmin() external;
     function queuedTransactions(bytes32 hash) external view returns (bool);
     function queueTransaction(address target, uint value, bytes calldata data, uint eta) external returns (bytes32);
     function cancelTransaction(address target, uint value, bytes calldata data, uint eta) external;
