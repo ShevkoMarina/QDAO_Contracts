@@ -12,6 +12,7 @@ async function main() {
 
 async function deploy() {
 
+  // засетить таймлок
     const QDAOToken = await ethers.getContractFactory("QDAOToken");
     const token = await QDAOToken.deploy(process.env.TOTAL, process.env.NAME,  process.env.SYMBOL, process.env.ADMIN_ADDRESS);
     console.log("QDAOToken deployed to address:", token.address);

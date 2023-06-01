@@ -101,6 +101,8 @@ contract QDAOGovernorDelegateStorageV1 is QDAOGovernorDelegatorStorage {
         /// @notice Flag marking whether the proposal has been executed
         bool executed;
 
+        bool queued;
+
         /// @notice Receipts of ballots for the entire set of voters
         mapping (address => Receipt) receipts;
 

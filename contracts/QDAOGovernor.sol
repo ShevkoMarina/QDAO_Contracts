@@ -139,6 +139,7 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         }
 
         proposal.eta = eta;
+        proposal.queued = true;
         emit ProposalQueued(proposalId, eta);
     }
 
@@ -164,6 +165,7 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
     function executeProposal(uint proposalId) external payable {
         require(getProposalState(proposalId) == ProposalState.Queued, "QDAOGovernor::execute: proposal can only be executed if it is queued");
         Proposal storage proposal = proposals[proposalId];
+        proposal.queued = false;
         proposal.executed = true;
 
         for (uint i = 0; i < proposal.targets.length; i++) {
@@ -212,6 +214,9 @@ contract QDAOGovernor is QDAOGovernorDelegateStorageV1, GovernorEvents {
         else if (proposal.forVotes <= proposal.againstVotes) {
             return ProposalState.Defeated;
         } 
+        else if (proposal.queued) {
+            return ProposalState.Queued;
+        }
         else if ((proposal.eta == 0 && proposal.forVotes >= getQuorum()) ||
                  (multisig.requiredApprovals() > 0 && 
                  proposal.eta == 0 && 
